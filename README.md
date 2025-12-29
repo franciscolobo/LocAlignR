@@ -5,6 +5,8 @@ It provides a graphical interface to run **BLAST** and **DIAMOND** on your own m
 
 LocAlign is designed for reproducible research, local database usage, and environments where data privacy or limited connectivity are important.
 
+LocAlign was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BLAST
+
 ---
 
 ## Features
