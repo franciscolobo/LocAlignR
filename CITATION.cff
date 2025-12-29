@@ -1,0 +1,40 @@
+cff-version: 1.2.0
+message: "If you use LocAlign in your research, please cite it using the information below."
+title: "LocAlign: a local Shiny application for sequence alignment using BLAST and DIAMOND"
+version: "0.1.0"
+date-released: 2026-01-15
+license: "MIT"
+
+authors:
+  - family-names: "Pereira Lobo"
+    given-names: "Francisco"
+    orcid: "https://orcid.org/0000-0002-9671-9313"
+    affiliation: "National Cancer Institute / National Institutes of Health"
+
+repository-code: "https://github.com/franciscolobo/LocAlign"
+url: "https://github.com/franciscolobo/LocAlign"
+
+abstract: >
+  LocAlign is a local, offline Shiny application for sequence alignment that
+  provides a graphical interface to run BLAST and DIAMOND on user-managed
+  databases. The tool is designed for reproducible research workflows,
+  data privacy, and environments with limited or no internet access.
+
+keywords:
+  - sequence alignment
+  - BLAST
+  - DIAMOND
+  - Shiny
+  - bioinformatics
+  - reproducible research
+
+preferred-citation:
+  type: software
+  title: "LocAlign: a local Shiny application for sequence alignment using BLAST and DIAMOND"
+  authors:
+    - family-names: "Lobo"
+      given-names: "Francisco Pereira"
+      orcid: "https://orcid.org/0000-0002-9671-9313"
+  year: 2026
+  version: "0.1.0"
+  url: "https://github.com/franciscolobo/LocAlign"
