@@ -1,132 +1,175 @@
 # Installation
 
-This document describes how to install **LocAlign** and its dependencies on Linux, macOS, and Windows.
-
-LocAlign is a local Shiny application and requires:
-- R and R packages
-- External alignment tools (BLAST+, optionally DIAMOND)
-
-The recommended installation method uses **conda/micromamba** for external tools and **renv** for R dependencies.
+LocAlign is distributed primarily as a conda package. This guarantees that all system-level dependencies (BLAST, DIAMOND, R, and R packages) are installed consistently across Linux, macOS, and Windows.
 
 ---
 
-## System requirements
+## Prerequisites
 
+- A working conda installation (Miniconda or Mambaforge recommended)
 - Operating system: Linux, macOS, or Windows
 - R >= 4.2
 - Internet access for initial installation
-- Sufficient disk space for local BLAST databases
+- Sufficient disk space for local BLAST/DIAMOND databases
 
 ---
 
-## 1. Clone the repository
+## Conda
 
-git clone https://github.com/<your-username>/LocAlign.git
-cd LocAlign
+Check conda is available:
 
-## 2. Install BLAST using conda or micromamba (recommended)
+conda --version
 
-Create a dedicated environment for external tools:
+### Recommended: clean environment (fully reproducible)
 
-conda create -n localign-tools -c conda-forge -c bioconda blast
+Create a dedicated environment for LocAlign:
+
+conda create -n localign -y
+conda activate localign
+
+### Required channels (critical)
+
+LocAlign depends on:
+
+- conda-forge for R and R packages
+
+- bioconda for BLAST and DIAMOND
+
+Channel order matters and must be:
+
+1) conda-forge
+
+2) bioconda
+
+3) defaults
+
+Set this once:
+
+conda config --add channels defaults
+conda config --add channels bioconda
+conda config --add channels conda-forge
+conda config --set channel_priority strict
 
 
-or, with micromamba:
+Verify:
 
-micromamba create -n localign-tools -c conda-forge -c bioconda blast
-
-
-Activate the environment:
-
-conda activate localign-tools
- or
-micromamba activate localign-tools
+conda config --show channels
 
 
-Verify installation:
+Expected order:
 
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+
+---
+
+## Install LocAlign
+
+Install LocAlign using explicit channels to ensure reproducibility:
+
+conda install --override-channels \
+  -c conda-forge \
+  -c bioconda \
+  -c defaults \
+  r-localign
+
+
+This will install:
+
+- LocAlign (R package)
+
+- R (via conda-forge)
+
+- BLAST+ (via bioconda)
+
+- DIAMOND (via bioconda)
+
+- All required R dependencies
+
+---
+
+## Verify installation
+
+### Check BLAST availability
 blastp -version
 makeblastdb -version
 
-## 3. Configure environment variables (optional but recommended)
+Both commands should return version information.
 
-LocAlign can detect BLAST on PATH, but environment variables provide explicit control.
+### Check DIAMOND availability
+diamond version
 
-Linux / macOS
-export LOCALIGN_BLASTP="$(which blastp)"
-export LOCALIGN_BLASTN="$(which blastn)"
-export LOCALIGN_MAKEBLASTDB="$(which makeblastdb)"
-
-
-To make this persistent, add the lines above to ~/.bashrc or ~/.zshrc.
-
-Windows (PowerShell)
-setx LOCALIGN_BLASTP (Get-Command blastp).Source
-setx LOCALIGN_BLASTN (Get-Command blastn).Source
-setx LOCALIGN_MAKEBLASTDB (Get-Command makeblastdb).Source
+### Launch LocAlign
+R -e "LocAlign::run_app()"
 
 
-Restart the terminal after running setx.
+The Shiny application should open in your browser.
 
-## 4. Install R dependencies
+### Notes on environment variables (optional)
 
-From the repository root:
+By default, LocAlign discovers tools from the active conda environment (PATH).
 
-R -e "install.packages('renv'); renv::restore()"
+Advanced users may override tool paths using environment variables:
+
+LOCALIGN_BLASTP
+
+LOCALIGN_BLASTN
+
+LOCALIGN_BLASTX
+
+LOCALIGN_TBLASTN
+
+LOCALIGN_MAKEBLASTDB
+
+LOCALIGN_DIAMOND
+
+Example:
+
+export LOCALIGN_MAKEBLASTDB=/custom/path/makeblastdb
 
 
-This installs all required R packages using the versions pinned in renv.lock.
+This is **not required** for standard conda installs.
 
-## 5. Run the application
+---
 
-Activate the conda environment (if not already active):
+## Platform-specific notes
 
-conda activate localign-tools
+### macOS (Apple Silicon)
 
+All dependencies are provided via conda-forge and bioconda. No Rosetta setup is required.
 
-Launch LocAlign:
+### Windows
 
-shiny::runApp("app")
+Use the conda prompt (Anaconda Prompt or Miniforge Prompt). All tools are installed as .exe binaries and are automatically detected.
 
+---
 
-The application should open in your default web browser.
-
-## 6. BLAST databases
-
-LocAlign does not ship with BLAST databases.
-
-You must either:
-
-Use remote databases (nr, nt), or
-
-Build local databases using makeblastdb
-
-See docs/databases.md for instructions on building and managing local databases.
-
-## 7. Troubleshooting
-
-If BLAST is not detected, verify:
-
-The conda environment is activated
-
-blastp and makeblastdb are on PATH
-
-LOCALIGN_* environment variables point to valid executables
-
-On Windows, ensure antivirus software is not blocking BLAST executables.
-
-For permission issues on macOS or Linux, check file execution permissions.
-
-## 8. Optional components
-
-DIAMOND support can be added by installing diamond in the same conda environment.
-
-A Docker-based setup may be provided for fully isolated execution.
-
-## Getting help
+## Troubleshooting
 
 If installation fails:
 
-Check the output of Rscript scripts/check_install.R
+1) Confirm channel order:
 
-Open a GitHub issue with your OS, R version, and error messages
+conda config --show channels
+
+
+2) Retry install with explicit channels:
+
+conda install --override-channels \
+  -c conda-forge -c bioconda -c defaults r-localign
+
+
+3) Ensure the environment is activated:
+
+conda activate localign
+
+---
+
+## Alternative installation methods
+
+Installing LocAlign without conda is not recommended and is unsupported for full functionality, as BLAST and DIAMOND must be available on PATH.
+
+This installation procedure is fully reproducible and is the only supported installation method for LocAlign.
+
