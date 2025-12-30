@@ -13,6 +13,10 @@ library(htmltools)
 library(htmlwidgets)
 library(shinyFiles)
 
+
+app_root <- normalizePath(".", winslash = "/", mustWork = TRUE)
+
+
 # Source helpers (paths are relative to the app directory)
 source("R/00_utils.R")
 source("R/01_metadata.R")
@@ -23,7 +27,14 @@ source("R/05_makeblastdb.R")
 
 server <- function(input, output, session) {
   session$onSessionEnded(function() stopApp())
+    
+  # ------- Helper to get paths -------
   
+  app_path <- function(...) {
+    file.path(getwd(), ...)
+  }
+
+
   # ---------- Metadata load ----------
   subject_meta <- load_subject_meta(
     tsv_path = "metadata/subject_meta.tsv",

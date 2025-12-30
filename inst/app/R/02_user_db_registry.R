@@ -2,7 +2,7 @@
 
 # Persistent DB registry file location
 user_db_file <- local({
-  d <- file.path(getwd(), "config")
+  d <- file.path(rappdirs::user_config_dir("LocAlign"), "config")
   dir.create(d, recursive = TRUE, showWarnings = FALSE)
   file.path(d, "user_dbs.yml")
 })

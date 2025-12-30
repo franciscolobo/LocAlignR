@@ -1,0 +1,18 @@
+Package: LocAlign
+Type: Package
+Title: Local Sequence Alignment via Shiny
+Version: 0.1.0
+Authors@R: c(
+    person("Francisco", "Pereira Lobo", role = c("aut", "cre"),
+           email = "YOUR_EMAIL_HERE")
+  )
+Description: A cross-platform Shiny application for running local sequence
+    alignments using BLAST and DIAMOND, with utilities to build and manage
+    local BLAST databases.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.2
+Imports:
+    shiny,
+    rappdirs
