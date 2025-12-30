@@ -14,8 +14,8 @@ load_or_default_config <- function(cfg_file) {
     # Default fallback (kept identical to your current behavior)
     list(
       databases = list(
-        Mlig_core_nt = "/Users/pereiralobof2/Projects/Erin/localBLAST/databases/Mlig_core_nt",
-        Mlig_core_aa = "/Users/pereiralobof2/Projects/Erin/localBLAST/databases/Mlig_core_aa"
+        Mlig_core_nt = "/Users/pereiralobof2/Projects/Erin/WolfBLAST/databases/Mlig_core_nt",
+        Mlig_core_aa = "/Users/pereiralobof2/Projects/Erin/WolfBLAST/databases/Mlig_core_aa"
       ),
       use_remote_for_standard = TRUE
     )

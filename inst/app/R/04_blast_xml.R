@@ -60,8 +60,20 @@ run_blast_as_xml <- function(prog, query, db, eval, remote) {
     threads <- as.character(max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
     args <- c(args, "-num_threads", threads)
   }
+  # Conda-first tool discovery: prefer PATH, allow override via LOCALIGN_<PROG>
+  prog_path <- LocAlign::localign_find_tool(prog, env_var = paste0("LOCALIGN_", toupper(prog)))
 
-  res <- processx::run(prog, args, error_on_status = FALSE, timeout = 600, echo = FALSE)
+  # Validate early with a clear message for cross-platform installs
+  validate(
+    need(
+      nzchar(prog_path),
+      paste0(prog, " not found. Activate the conda environment (preferred) or set ", 
+             paste0("LOCALIGN_", toupper(prog)), ".")
+    )
+  )
+
+  res <- processx::run(prog_path, args, error_on_status = FALSE, timeout = 600, echo = FALSE)
+
 
   shiny::validate(
     shiny::need(res$status == 0, paste("BLAST failed:", res$stderr)),

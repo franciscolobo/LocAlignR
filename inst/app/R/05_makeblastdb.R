@@ -27,7 +27,17 @@ run_makeblastdb_and_register <- function(input,
 
   append_log("[makeblastdb] cmd: makeblastdb %s", paste(shQuote(args), collapse = " "))
 
-  res <- processx::run("makeblastdb", args, error_on_status = FALSE, timeout = 1800, echo = FALSE)
+  # Conda-first tool discovery: prefer PATH, allow override via LOCALIGN_MAKEBLASTDB
+  makeblastdb_path <- LocAlign::localign_find_tool("makeblastdb", env_var = "LOCALIGN_MAKEBLASTDB")
+
+  validate(
+    need(
+      nzchar(makeblastdb_path),
+      "makeblastdb not found. Activate the conda environment (preferred) or set LOCALIGN_MAKEBLASTDB."
+    )
+  )
+
+  res <- processx::run(makeblastdb_path, args, error_on_status = FALSE, timeout = 1800, echo = FALSE)
 
   append_log("[makeblastdb] exit status: %d", res$status)
   if (nzchar(res$stdout)) append_log(res$stdout)
