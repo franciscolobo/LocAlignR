@@ -1,0 +1,61 @@
+{% set name = "r-localign" %}
+{% set version = "0.1.0" %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  # For local testing with conda-build from this repo
+  path: ..
+
+build:
+  number: 0
+  noarch: generic
+  script: R CMD INSTALL . --no-multiarch
+
+requirements:
+  host:
+    - r-base {{ r_base }}
+    - r-shiny
+    - r-rappdirs
+  run:
+    - r-base {{ r_base }}
+    - r-shiny
+    - r-rappdirs
+    - r-shinythemes
+    - r-dt
+    - r-shinyfiles
+    - r-shinybusy
+    - r-xml
+    - r-plyr
+    - r-dplyr
+    - r-yaml
+    - r-processx
+    - r-digest
+    - r-htmltools
+    - r-htmlwidgets
+    - r-rappdirs
+    - blast
+    - diamond
+
+test:
+  commands:
+    # Verify if BLAST is available
+    - blastp -version
+    - makeblastdb -version
+
+    # Verify if DIAMOND is available
+    - diamond help
+
+    # Verify the R package loads and the app entrypoint exists
+    - R -e "library(LocAlign); stopifnot(is.function(run_app))"
+
+about:
+  summary: "Cross-platform Shiny app for local sequence alignment using BLAST and DIAMOND."
+  license: MIT
+  license_file: LICENSE
+
+extra:
+  recipe-maintainers:
+    - franciscolobo

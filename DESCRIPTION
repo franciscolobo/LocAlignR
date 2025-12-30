@@ -4,7 +4,7 @@ Title: Local Sequence Alignment via Shiny
 Version: 0.1.0
 Authors@R: c(
     person("Francisco", "Pereira Lobo", role = c("aut", "cre"),
-           email = "YOUR_EMAIL_HERE")
+           email = "franciscolobo@gmail.com")
   )
 Description: A cross-platform Shiny application for running local sequence
     alignments using BLAST and DIAMOND, with utilities to build and manage
