@@ -24,6 +24,8 @@ source("R/02_user_db_registry.R")
 source("R/03_alignment_rendering.R")
 source("R/04_blast_xml.R")
 source("R/05_makeblastdb.R")
+source("R/90_diagnostics.R", local = TRUE)
+
 
 server <- function(input, output, session) {
   session$onSessionEnded(function() stopApp())
@@ -34,7 +36,9 @@ server <- function(input, output, session) {
     file.path(getwd(), ...)
   }
 
-
+  wire_diagnostics(output)
+  
+  
   # ---------- Metadata load ----------
   subject_meta <- load_subject_meta(
     tsv_path = "metadata/subject_meta.tsv",

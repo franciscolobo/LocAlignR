@@ -1,11 +1,13 @@
 # app/ui/main_tabs.R
 
+source("ui/diagnostics_tab.R", local = FALSE)
+
 main_tabs <- function() {
   tabsetPanel(
     id = "main_tabs",
 
     tabPanel(
-      "Run BLAST results",
+      "BLAST results",
       h4("Results"),
       DTOutput("blastResults"),
       hr(),
@@ -17,6 +19,7 @@ main_tabs <- function() {
       "Build DB log",
       h4("DB build log"),
       verbatimTextOutput("make_log")
-    )
+    ),
+    diagnostics_tab
   )
 }
