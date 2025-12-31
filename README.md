@@ -1,6 +1,6 @@
 # LocAlign
 
-**LocAlign** is a local, offline Shiny application for sequence alignment.  
+**LocAlign** is a local, offline Shiny application for biological sequence alignment.  
 It provides a graphical interface to run **BLAST** and **DIAMOND** on your own machine, without uploading data to external servers.
 
 LocAlign is designed for reproducible research, local database usage, and environments where data privacy or limited connectivity are important.
@@ -18,105 +18,158 @@ LocAlign was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BLA
 - Support for custom, user-built databases
 - Fully offline operation after installation
 - Cross-platform: Linux, macOS, and Windows
-- Reproducible R environment via `renv`
+- Conda-based installation for external tools
+- Built-in **Diagnostics** tab for tool and environment checks
 
 ---
 
 ## Requirements
 
 - R (>= 4.2 recommended)
-- BLAST+ and DIAMOND installed locally
+- BLAST+ and DIAMOND available on `PATH`
 - Supported operating systems:
   - Linux
   - macOS (Intel and Apple Silicon)
   - Windows
 
-The recommended way to install BLAST and DIAMOND is via micromamba/conda.
+The recommended and supported way to install BLAST and DIAMOND is via **conda**.
 
 ---
 
-## Installation (Quick Start)
+## Installation
 
-### 1. Clone the repository
+### Conda-based installation (recommended)
 
-git clone https://github.com/<your-org>/LocAlign.git
-cd LocAlign
+LocAlign is designed to be installed and run inside a conda environment that provides
+BLAST, DIAMOND, and all required R dependencies.
 
-### 2. Install external tools (BLAST and DIAMOND)
+See:
 
-micromamba create -f tools/environment.yml -n localign-tools
-micromamba activate localign-tools
+docs/installation.md
 
-### 3. Restore R dependencies
+for a fully reproducible installation procedure, including exact channel configuration.
 
-R -e "install.packages('renv'); renv::restore()"
+---
 
-### 4. Verify the installation
+## Running LocAlign
 
-Rscript scripts/check_install.R
+After installation, launch LocAlign from R:
 
+```r
+LocAlign::run_app()
+```
 
-## Running the app
-
-Rscript app/app.R
-
-Or from an R session:
-
-shiny::runApp("app")
+This will start the Shiny application locally and open it in your browser.
 
 ## Databases
 
 LocAlign does not ship with alignment databases.
 
-You must create your own BLAST or DIAMOND databases locally.
+### User-provided databases
 
-See:
+You may create your own BLAST or DIAMOND databases locally.
 
-docs/databases.md for detailed instructions
+The application includes functionality to build them.
 
-scripts/make_blast_db.R
+For guidance:
 
-scripts/make_diamond_db.R
+See the Build database panel in the application
+
+Or consult the documentation in docs/
+
+### Curated reference databases (optional)
+
+LocAlign also provides access to a small, non-redundant set of curated reference databases with representative homolog sets across major taxonomic groups.
+
+These databases are:
+
+- Hosted externally on Zenodo
+
+- Downloaded on demand from within the application interface
+
+- Stored locally on the user’s machine
+
+- Formatted locally using BLAST (makeblastdb) or DIAMOND tools
+
+This approach avoids shipping large data files with the application while ensuring:
+
+- Reproducibility
+
+- Transparent provenance
+
+- Full offline use after download
+
+Downloaded databases can be reused across sessions and configured once.
+
+---
 
 ## Configuration
 
-Optional configuration can be provided via YAML files in config/.
+LocAlign uses two levels of configuration:
 
-config/default.yml contains defaults
+- **Default, read-only configuration** bundled with the app
 
-config/example.local.yml shows how to override tool paths and settings
+- **User-specific configuration** stored in an OS-appropriate location
 
-Environment variables can also be used:
+For advanced users, external tool paths can be controlled via environment variables if needed:
 
-LOCALIGN_BLASTP
+- LOCALIGN_BLASTP
 
-LOCALIGN_BLASTN
+- LOCALIGN_BLASTN
 
-LOCALIGN_MAKEBLASTDB
+- LOCALIGN_MAKEBLASTDB
 
 LOCALIGN_DIAMOND
 
-## Reproducibility
+The Diagnostics tab reports which tools are detected and which paths are in use.
 
-R package versions are pinned via renv.lock
+---
 
-External tool versions are controlled via tools/environment.yml
+## Development notes
 
-Each release will be tagged and archived for citation
+- A minimal R package wrapper is used to provide:
+
+ - LocAlign::run_app()
+
+ - versioning
+
+ - citation support
+
+- Developer-only tooling (e.g. renv) is kept under dev/ and is optional
+
+---
 
 ## Project status
 
 LocAlign is under active development.
-The interface, configuration schema, and default workflows may change.
+
+Interfaces, workflows, and configuration options may evolve, but releases will be
+tagged and versioned.
+
+---
 
 ## Citation
 
-If you use LocAlign in academic work, please cite it using the information in CITATION.cff.
+If you use LocAlign in academic work, please cite it using the information in:
+
+- CITATION.cff (GitHub / general use)
+
+- citation("LocAlign") from within R
+
+---
 
 ## License
 
+LocAlign is released under the MIT License.
+
 See the LICENSE file for details.
 
-## Contact
+---
 
-For questions, bug reports, or feature requests, please open an issue on GitHub.
+## Contact and contributions
+
+For bug reports, feature requests, or questions, please open an issue on GitHub.
+
+Contributions are welcome.
+
+See CONTRIBUTING.md for guidelines.
