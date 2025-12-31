@@ -1,0 +1,20 @@
+citHeader("To cite LocAlign in publications, please use:")
+
+citEntry(
+  entry    = "software",
+  title    = "LocAlign: Local sequence alignment via BLAST and DIAMOND in a Shiny application",
+  author   = person(
+    given  = "Francisco",
+    family = "Pereira Lobo"
+  ),
+  year     = "2025",
+  note     = "R/Shiny application",
+  url      = "https://github.com/franciscolobo/LocAlign",
+  textVersion = paste(
+    "Pereira Lobo F. (2025).",
+    "LocAlign: Local sequence alignment via BLAST and DIAMOND in a Shiny application.",
+    "GitHub repository:",
+    "https://github.com/franciscolobo/LocAlign"
+  )
+)
+

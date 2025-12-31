@@ -1,9 +1,0 @@
-shiny
-yaml
-processx
-digest
-XML
-plyr
-dplyr
-shinythemes
-DT
