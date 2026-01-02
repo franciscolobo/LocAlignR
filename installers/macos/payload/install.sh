@@ -140,6 +140,105 @@ yaml_upsert_db() {
   ' "$USER_DB_YML" "$nm" "$pth" "$tp"
 }
 
+create_gui_launcher() {
+  # Creates ~/Applications/LocAlign.app
+  local target_dir="$HOME/Applications"
+  local app="$target_dir/LocAlign.app"
+  local contents="$app/Contents"
+  local macos="$contents/MacOS"
+
+  mkdir -p "$macos" || die "Failed to create ~/Applications."
+
+  # If you want the app to be hidden (no Dock icon), set LSUIElement to true below.
+  # Most users expect a Dock icon, so default is false (remove LSUIElement).
+  cat > "$contents/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>CFBundleName</key>
+    <string>LocAlign</string>
+    <key>CFBundleDisplayName</key>
+    <string>LocAlign</string>
+
+    <!-- Use a stable reverse-DNS identifier you control -->
+    <key>CFBundleIdentifier</key>
+    <string>io.github.franciscolobo.localign</string>
+
+    <key>CFBundleVersion</key>
+    <string>0.1.0</string>
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleExecutable</key>
+    <string>LocAlign</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>10.15</string>
+
+    <!-- Uncomment to hide from Dock/App Switcher -->
+    <!-- <key>LSUIElement</key><true/> -->
+  </dict>
+</plist>
+PLIST
+
+  cat > "$macos/LocAlign" <<'SH'
+#!/bin/zsh
+set -euo pipefail
+
+APP_NAME="LocAlign"
+ENV_NAME="localign"
+
+# Prefer explicit installs, then PATH
+CANDIDATES=(
+  "$HOME/miniforge3/bin/conda"
+  "$HOME/miniconda3/bin/conda"
+  "$HOME/mambaforge/bin/conda"
+  "$(command -v conda || true)"
+  "$(command -v mamba || true)"
+  "$(command -v micromamba || true)"
+)
+
+CONDA_BIN=""
+for c in "${CANDIDATES[@]}"; do
+  if [[ -n "$c" && -x "$c" ]]; then
+    CONDA_BIN="$c"
+    break
+  fi
+done
+
+if [[ -z "$CONDA_BIN" ]]; then
+  osascript -e 'display dialog "LocAlign could not find conda/mamba/micromamba. Re-run the LocAlign installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+# Quick env existence check (more helpful than failing later)
+if ! "$CONDA_BIN" env list 2>/dev/null | awk '{print $1}' | grep -qx "$ENV_NAME"; then
+  osascript -e "display dialog \"LocAlign conda environment '$ENV_NAME' was not found. Re-run the LocAlign installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
+  exit 1
+fi
+
+# Sanity check: LocAlign installed?
+if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'packageVersion("LocAlign")' >/dev/null 2>&1; then
+  osascript -e 'display dialog "LocAlign is not installed in the conda environment (localign). Re-run the LocAlign installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
+  exit 1
+fi
+
+# Tell the user what will happen (helps with the "nothing happened" feeling)
+osascript -e 'display dialog "Starting LocAlign.\n\nA browser window will open in a few seconds.\n\nTo stop LocAlign, quit this app." buttons {"OK"} default button 1' >/dev/null 2>&1 || true
+
+# Launch the Shiny app
+exec "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'LocAlign::run_app()'
+SH
+
+  chmod +x "$macos/LocAlign" || die "Failed to make launcher executable."
+  touch "$app"
+  say "Created GUI launcher: $app"
+}
+
+
 # ----------------------------
 # Step 0: intro
 # ----------------------------
@@ -374,4 +473,44 @@ else
   say "Skipping formatting/registration."
 fi
 
-say ""
+# ----------------------------
+# Step 5: optionally create launcher app
+# ----------------------------
+say "== Step 5/5: create LocAlign launcher app =="
+
+if ask_yes_no "Would you like to create a LocAlign launcher app in ~/Applications (double-click to run)?"; then
+  create_gui_launcher
+fi
+
+
+# ----------------------------
+# Final: optionally launch LocAlign now (GUI)
+# ----------------------------
+if ask_yes_no "Installation steps completed.
+
+Would you like to launch LocAlign now?"; then
+  say "Launching LocAlign (GUI)..."
+
+  LAUNCHER_APP="$HOME/Applications/LocAlign.app"
+
+  # If the launcher does not exist, offer to create it now
+  if [[ ! -d "$LAUNCHER_APP" ]]; then
+    if ask_yes_no "LocAlign launcher app was not found in ~/Applications.
+
+Create it now?"; then
+      create_gui_launcher
+    else
+      die "Launcher app not found. Re-run installer and create the launcher, or run LocAlign from Terminal."
+    fi
+  fi
+
+  # Launch via Finder (non-blocking, no terminal required)
+  open "$LAUNCHER_APP" >/dev/null 2>&1 || die "Failed to open: $LAUNCHER_APP"
+
+else
+  say ""
+  say "Done. To run LocAlign later:"
+  say "  Double-click: ~/Applications/LocAlign.app"
+  say "  Or (Terminal): $CONDA_BIN run -n ${ENV_NAME} R -q -e 'LocAlign::run_app()'"
+  say ""
+fi

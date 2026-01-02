@@ -1,4 +1,4 @@
-# OS installer build outputs
-installers/**/dist/
+# macOS installer build artifacts
+installers/macos/dist/
 installers/**/*.app
 installers/**/*.zip
