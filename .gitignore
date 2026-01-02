@@ -1,0 +1,4 @@
+# OS installer build outputs
+installers/**/dist/
+installers/**/*.app
+installers/**/*.zip

@@ -1,0 +1,42 @@
+{
+  "schema_version": "1.0",
+  "generated_utc": "2026-01-02T00:00:00Z",
+  "source": {
+    "provider": "local-test",
+    "record_doi": null,
+    "record_version": "dev"
+  },
+  "databases": [
+    {
+      "id": "local_test_nt",
+      "display_name": "LOCAL TEST (nucleotide) test.fna.gz from /tmp/localign-db",
+      "description": "Local test database for installer development. Uses file:// URL and a tiny FASTA.",
+      "molecule": "nucleotide",
+      "recommended_aligner": "blast",
+      "license": "internal-test",
+      "files": [
+        {
+          "kind": "fasta",
+          "filename": "test.fna.gz",
+          "url": "file:///tmp/localign-db/test.fna.gz",
+          "sha256": "b712b47cd6931039d6ae0f3b48be9953408f43d014bd30939888ca0d1a453210"
+        }
+      ],
+      "post_download": {
+        "extract": {
+          "type": "gzip",
+          "outputs": ["test.fna"]
+        },
+        "format_options": [
+          {
+            "tool": "makeblastdb",
+            "register": {
+              "name": "local_test_nt",
+              "type": "nucl"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

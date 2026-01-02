@@ -1,0 +1,66 @@
+{
+  "schema_version": "1.0",
+  "generated_utc": "2025-12-31T00:00:00Z",
+  "source": {
+    "provider": "zenodo",
+    "record_doi": "10.5281/zenodo.XXXXXXX",
+    "record_version": "v0.1.0"
+  },
+  "databases": [
+    {
+      "id": "vertebrate_homologs_prot_rep1",
+      "display_name": "Vertebrate homologs (protein, 1 representative per homolog group)",
+      "description": "Protein FASTA of vertebrate homolog groups with one representative per group.",
+      "molecule": "protein",
+      "recommended_aligner": "diamond",
+      "license": "CC-BY-4.0",
+      "files": [
+        {
+          "kind": "fasta",
+          "filename": "vertebrate_homologs_rep1.faa.gz",
+          "url": "https://zenodo.org/record/XXXXXXX/files/vertebrate_homologs_rep1.faa.gz",
+          "sha256": "REPLACE_WITH_SHA256"
+        }
+      ],
+      "post_download": {
+        "extract": { "type": "gzip", "outputs": ["vertebrate_homologs_rep1.faa"] },
+        "format_options": [
+          {
+            "tool": "diamond",
+            "db_base_suffix": ".dmnd",
+            "register": { "name": "Vertebrate_homologs_prot_rep1", "type": "prot" }
+          },
+          {
+            "tool": "makeblastdb",
+            "register": { "name": "Vertebrate_homologs_prot_rep1_blast", "type": "prot" }
+          }
+        ]
+      }
+    },
+    {
+      "id": "vertebrate_homologs_nt_rep1",
+      "display_name": "Vertebrate homologs (nucleotide, 1 representative per homolog group)",
+      "description": "Nucleotide FASTA corresponding to the vertebrate homolog representative set.",
+      "molecule": "nucleotide",
+      "recommended_aligner": "blast",
+      "license": "CC-BY-4.0",
+      "files": [
+        {
+          "kind": "fasta",
+          "filename": "vertebrate_homologs_rep1.fna.gz",
+          "url": "https://zenodo.org/record/XXXXXXX/files/vertebrate_homologs_rep1.fna.gz",
+          "sha256": "REPLACE_WITH_SHA256"
+        }
+      ],
+      "post_download": {
+        "extract": { "type": "gzip", "outputs": ["vertebrate_homologs_rep1.fna"] },
+        "format_options": [
+          {
+            "tool": "makeblastdb",
+            "register": { "name": "Vertebrate_homologs_nt_rep1", "type": "nucl" }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,377 @@
+#!/bin/zsh
+set -euo pipefail
+
+# ----------------------------
+# LocAlign macOS installer
+# ----------------------------
+
+APP_NAME="LocAlign"
+USER_CFG_DIR="$HOME/Library/Application Support/${APP_NAME}/config"
+USER_DB_YML="${USER_CFG_DIR}/user_dbs.yml"
+
+# Your conda channels (adjust once you publish)
+# Keep this order: conda-forge first, then bioconda, then your channel, with strict priority.
+CF="conda-forge"
+BC="bioconda"
+MYCHAN="franciscolobo"   # e.g. "localign" or your org channel
+
+# Package name in conda
+PKG="r-localign"
+
+# Conda environment name
+ENV_NAME="localign"
+
+# Miniforge bootstrap (when conda is missing)
+MINIFORGE_VERSION="25.3.1-0"        # choose a version and keep it pinned
+MINIFORGE_PREFIX="$HOME/miniforge3" # install location
+
+# Fill these after you decide the exact installer build:
+MINIFORGE_SHA256_ARM64="REPLACE_WITH_SHA256"
+MINIFORGE_SHA256_X86_64="REPLACE_WITH_SHA256"
+
+# Manifest path
+MANIFEST="$(cd "$(dirname "$0")" && pwd)/db_manifest.json"
+
+
+# Helpers
+say() { print -r -- "$@"; }
+die() { say "ERROR: $*"; exit 1; }
+
+ask_yes_no() {
+  local prompt="$1"
+  local reply
+  reply=$(osascript -e "button returned of (display dialog \"$prompt\" buttons {\"Cancel\",\"Continue\"} default button \"Continue\")" 2>/dev/null || true)
+  [[ "$reply" == "Continue" ]]
+}
+
+ask_choice() {
+  # args: prompt, choices (comma-separated)
+  local prompt="$1"
+  local choices_csv="$2"
+  osascript -e "choose from list {${choices_csv}} with prompt \"$prompt\" default items {item 1 of {${choices_csv}}}" 2>/dev/null || true
+}
+
+ask_folder() {
+  osascript -e 'POSIX path of (choose folder with prompt "Choose a folder")' 2>/dev/null || true
+}
+
+require_continue() {
+  local msg="$1"
+  ask_yes_no "$msg" || exit 0
+}
+
+dl_file() {
+  # args: url, outpath
+  local url="$1"
+  local out="$2"
+
+  if [[ "$url" == file://* ]]; then
+    local src="${url#file://}"
+    [[ -f "$src" ]] || die "Local file not found: $src"
+    cp -f "$src" "$out"
+  else
+    curl -fL "$url" -o "$out" || die "Download failed: $url"
+  fi
+}
+
+verify_sha256() {
+  # args: filepath, expected_sha256
+  local fp="$1"
+  local exp="$2"
+  [[ -n "$exp" ]] || die "Missing expected sha256 for $fp"
+  local got
+  got="$(shasum -a 256 "$fp" | awk '{print $1}')"
+  [[ "$got" == "$exp" ]] || die "SHA256 mismatch for $fp"
+}
+
+manifest_list_tsv() {
+  "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+    mf <- commandArgs(TRUE)[1]
+    m <- jsonlite::read_json(mf, simplifyVector = FALSE)
+    if (is.null(m$databases) || length(m$databases) == 0) quit(status = 2)
+    for (d in m$databases) {
+      cat(d$id, d$display_name, sep = "\t")
+      cat("\n")
+    }
+  ' "$MANIFEST"
+}
+
+manifest_get_db_json() {
+  # args: db_id
+  "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+    id <- commandArgs(TRUE)[1]
+    mf <- commandArgs(TRUE)[2]
+    m <- jsonlite::read_json(mf, simplifyVector = FALSE)
+    if (is.null(m$databases) || length(m$databases) == 0) quit(status = 2)
+    hit <- NULL
+    for (d in m$databases) {
+      if (!is.null(d$id) && identical(d$id, id)) { hit <- d; break }
+    }
+    if (is.null(hit)) quit(status = 3)
+    cat(jsonlite::toJSON(hit, auto_unbox = TRUE, pretty = FALSE))
+  ' "$1" "$MANIFEST"
+}
+
+yaml_upsert_db() {
+  # args: name, path, type
+  local nm="$1"
+  local pth="$2"
+  local tp="$3"
+
+  mkdir -p "$USER_CFG_DIR"
+
+  "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+    suppressPackageStartupMessages({library(yaml)})
+    yml <- commandArgs(TRUE)[1]
+    nm  <- commandArgs(TRUE)[2]
+    pth <- commandArgs(TRUE)[3]
+    tp  <- commandArgs(TRUE)[4]
+
+    x <- list()
+    if (file.exists(yml)) {
+      x <- tryCatch(read_yaml(yml), error = function(e) list())
+      if (is.null(x)) x <- list()
+    }
+    x[[nm]] <- list(path = pth, type = tp)
+
+    tmp <- paste0(yml, ".tmp")
+    write_yaml(x, tmp)
+    file.rename(tmp, yml)
+  ' "$USER_DB_YML" "$nm" "$pth" "$tp"
+}
+
+# ----------------------------
+# Step 0: intro
+# ----------------------------
+require_continue "This installer will set up LocAlign on your Mac.
+
+Steps:
+1) Install micromamba/conda if needed
+2) Create a conda environment and install LocAlign
+3) Optionally download curated databases
+4) Optionally format and register databases
+
+Continue?"
+
+# ----------------------------
+# Step 1: conda availability
+# ----------------------------
+say "== Step 1/4: Checking for conda/micromamba =="
+
+CONDA_BIN=""
+if command -v micromamba >/dev/null 2>&1; then
+  CONDA_BIN="micromamba"
+elif command -v mamba >/dev/null 2>&1; then
+  CONDA_BIN="mamba"
+elif command -v conda >/dev/null 2>&1; then
+  CONDA_BIN="conda"
+fi
+
+if [[ -z "$CONDA_BIN" ]]; then
+  require_continue "No conda/mamba found.
+
+Install Miniforge (conda-forge based) now? It will be installed to:
+${MINIFORGE_PREFIX}"
+
+  ARCH="$(uname -m)"
+  case "$ARCH" in
+    arm64)   MF_ARCH="arm64";  MF_SHA="$MINIFORGE_SHA256_ARM64" ;;
+    x86_64)  MF_ARCH="x86_64"; MF_SHA="$MINIFORGE_SHA256_X86_64" ;;
+    *) die "Unsupported architecture: $ARCH" ;;
+  esac
+
+  MF_NAME="Miniforge3-${MINIFORGE_VERSION}-MacOSX-${MF_ARCH}.sh"
+  MF_URL="https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/${MF_NAME}"
+  MF_TMP="$(mktemp -t miniforge.XXXXXX).sh"
+
+  say "Downloading: ${MF_NAME}"
+  curl -fL "$MF_URL" -o "$MF_TMP" || die "Failed to download Miniforge."
+
+  if [[ "$MF_SHA" == REPLACE_WITH_SHA256* ]]; then
+    die "Miniforge SHA256 is not set. Update MINIFORGE_SHA256_* for ${MF_NAME}."
+  fi
+
+  GOT_SHA="$(shasum -a 256 "$MF_TMP" | awk '{print $1}')"
+  [[ "$GOT_SHA" == "$MF_SHA" ]] || die "SHA256 mismatch for Miniforge installer."
+
+  chmod +x "$MF_TMP"
+  say "Installing Miniforge to: ${MINIFORGE_PREFIX}"
+  bash "$MF_TMP" -b -p "$MINIFORGE_PREFIX" || die "Miniforge install failed."
+  rm -f "$MF_TMP"
+
+  # Activate conda in this script context
+  CONDA_BIN="${MINIFORGE_PREFIX}/bin/conda"
+  [[ -x "$CONDA_BIN" ]] || die "conda not found after Miniforge install."
+
+  say "Installed conda: $("$CONDA_BIN" --version)"
+else
+  say "Found: $CONDA_BIN"
+fi
+
+# ----------------------------
+# Step 2: create env + install LocAlign
+# ----------------------------
+say "== Step 2/4: Installing LocAlign into a conda environment =="
+
+ENV_NAME="localign"
+require_continue "LocAlign will be installed into conda environment: ${ENV_NAME}
+
+Continue?"
+
+# Strict, reproducible channel behavior: use override-channels.
+# Also ensure correct channel ordering for solvability (conda-forge first is typical for R stacks).
+"$CONDA_BIN" create -y -n "$ENV_NAME" \
+  --override-channels -c "$CF" -c "$BC" -c "$MYCHAN" \
+  "$PKG" r-jsonlite r-yaml || die "Conda environment creation/install failed."
+
+say "Installed ${PKG} in environment ${ENV_NAME}"
+
+# ----------------------------
+# Step 3: optionally download curated databases
+# ----------------------------
+say "== Step 3/4: Optional curated databases =="
+
+if ask_yes_no "Would you like to download curated databases now?"; then
+  [[ -f "$MANIFEST" ]] || die "Missing db_manifest.json: $MANIFEST"
+
+  DB_DIR=$(ask_folder)
+  [[ -n "$DB_DIR" ]] || die "No folder selected."
+  say "Databases will be downloaded to: $DB_DIR"
+
+  # Build list of display names for osascript
+# Build list of display names for osascript
+DB_TSV="$(manifest_list_tsv)"
+[[ -n "$DB_TSV" ]] || die "Manifest has no databases."
+
+# Prepare AppleScript list: "name1","name2",...
+DB_NAMES_CSV="$(printf '%s\n' "$DB_TSV" | cut -f2 | sed 's/"/\\"/g' | awk '{printf "\"%s\",", $0}' | sed 's/,$//')"
+
+# IMPORTANT: return chosen items as newline-separated text to avoid commas breaking parsing
+CHOSEN="$(osascript 2>/dev/null <<OSA || true
+set dbs to {${DB_NAMES_CSV}}
+set chosen to choose from list dbs with prompt "Select one or more databases to download" with multiple selections allowed
+if chosen is false then
+  return ""
+end if
+set AppleScript's text item delimiters to linefeed
+return chosen as text
+OSA
+)"
+
+if [[ -z "$CHOSEN" ]]; then
+  say "No selection. Skipping downloads."
+else
+  # Now CHOSEN is newline-separated, so we can read it safely
+  while IFS= read -r disp; do
+    disp="$(printf "%s" "$disp" | sed 's/^"//; s/"$//')"
+    [[ -n "$disp" ]] || continue
+
+    db_id="$(printf '%s\n' "$DB_TSV" | awk -F'\t' -v d="$disp" '$2==d{print $1; exit}')"
+    [[ -n "$db_id" ]] || die "Could not map selection to db id: $disp"
+
+    say ""
+    say "Downloading: $disp"
+    db_json="$(manifest_get_db_json "$db_id")" || die "Failed to read db entry: $db_id"
+
+    file_tsv="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+      f <- d$files
+      cat(paste(f$filename, f$url, f$sha256, sep="\t"), sep="\n")
+    ' "$db_json")"
+    [[ -n "$file_tsv" ]] || die "No files found in manifest for: $db_id"
+
+    db_subdir="${DB_DIR%/}/${db_id}"
+    mkdir -p "$db_subdir"
+
+    while IFS=$'\t' read -r fn url sha; do
+      [[ -n "$fn" && -n "$url" && -n "$sha" ]] || die "Malformed file entry for $db_id"
+      out="${db_subdir}/${fn}"
+      say "  Fetching: $fn"
+      dl_file "$url" "$out"
+      verify_sha256 "$out" "$sha"
+    done <<< "$file_tsv"
+
+    gzip_file="$(printf '%s\n' "$file_tsv" | head -n1 | cut -f1)"
+    in_gz="${db_subdir}/${gzip_file}"
+    [[ -f "$in_gz" ]] || die "Expected file missing: $in_gz"
+
+    fasta_out="${in_gz%.gz}"
+    say "  Extracting: $(basename "$in_gz") -> $(basename "$fasta_out")"
+    gunzip -c "$in_gz" > "$fasta_out"
+    say "  Saved FASTA: $fasta_out"
+
+  done <<< "$CHOSEN"
+fi
+else
+  say "Skipping downloads."
+fi
+
+# ----------------------------
+# Step 4: optionally format + register databases
+# ----------------------------
+say "== Step 4/4: Optional formatting and registration =="
+
+if ask_yes_no "Would you like to format downloaded databases and register them for LocAlign now?"; then
+  require_continue "This step can run makeblastdb and/or diamond, then update:
+${USER_DB_YML}
+
+Continue?"
+
+  DB_DIR=$(ask_folder)
+  [[ -n "$DB_DIR" ]] || die "No folder selected."
+  say "Using database folder: $DB_DIR"
+
+  for db_subdir in "$DB_DIR"/*; do
+    [[ -d "$db_subdir" ]] || continue
+    db_id="$(basename "$db_subdir")"
+
+    # Need manifest entry for this id
+    db_json="$(manifest_get_db_json "$db_id")" || { say "Skipping unknown folder (not in manifest): $db_id"; continue; }
+
+    fasta="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+      # assume single gz; extracted fasta name is outputs[1]
+      out <- d$post_download$extract$outputs[1]
+      cat(out)
+    ' "$db_json")"
+
+    fasta_path="${db_subdir%/}/${fasta}"
+    [[ -f "$fasta_path" ]] || { say "Skipping (FASTA not found): $fasta_path"; continue; }
+
+    molecule="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e 'd<-jsonlite::fromJSON(commandArgs(TRUE)[1]); cat(d$molecule)' "$db_json")"
+    db_base="${db_subdir%/}/${db_id}"
+
+    say ""
+    say "Formatting options for: $db_id"
+
+    # Offer BLAST formatting when relevant
+    if ask_yes_no "Build BLAST database for $db_id?"; then
+      if [[ "$molecule" == "protein" ]]; then
+        "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb -in "$fasta_path" -dbtype prot -out "$db_base" -parse_seqids \
+          || die "makeblastdb failed for $db_id"
+        yaml_upsert_db "${db_id}_blast" "$db_base" "prot"
+      else
+        "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb -in "$fasta_path" -dbtype nucl -out "$db_base" -parse_seqids \
+          || die "makeblastdb failed for $db_id"
+        yaml_upsert_db "${db_id}_blast" "$db_base" "nucl"
+      fi
+      say "Registered BLAST DB: ${db_id}_blast"
+    fi
+
+    # Offer DIAMOND formatting only for protein
+    if [[ "$molecule" == "protein" ]]; then
+      if ask_yes_no "Build DIAMOND database for $db_id?"; then
+        "$CONDA_BIN" run -n "$ENV_NAME" diamond makedb --in "$fasta_path" --db "$db_base" \
+          || die "diamond makedb failed for $db_id"
+        yaml_upsert_db "${db_id}_diamond" "$db_base" "prot"
+        say "Registered DIAMOND DB: ${db_id}_diamond"
+      fi
+    fi
+  done
+
+  say "Formatting/registration complete."
+else
+  say "Skipping formatting/registration."
+fi
+
+say ""
