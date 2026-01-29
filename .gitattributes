@@ -1,0 +1,10 @@
+# Default: keep LF in the repo
+* text=auto eol=lf
+
+# Explicitly treat scripts as text with LF
+*.ps1 text eol=lf
+*.sh  text eol=lf
+*.R   text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.md  text eol=lf
