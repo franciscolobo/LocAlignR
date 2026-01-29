@@ -66,7 +66,11 @@ plot_alignment_lines <- function() {
     ggplot2::geom_segment(ggplot2::aes(x = 0.30, xend = 0.86, y = 0.20, yend = 0.20),
                     linewidth = 2.2, color = "white", lineend = "round") +
     ggplot2::coord_equal(xlim = c(0, 1), ylim = c(0, 1), expand = FALSE) +
-    ggplot2::theme_void()
+    ggplot2::theme_void() +
+    ggplot2::coord_equal(xlim = c(0, 1), ylim = c(0, 1), expand = FALSE) +
+    ggplot2::theme_void() +
+    hexSticker::theme_transparent() # Added to ensure no white box clips the hex
+  
 }
 
 make_sticker_alignment_lines <- function(plot) {
@@ -77,17 +81,19 @@ make_sticker_alignment_lines <- function(plot) {
     p_size = 18,
     p_color = "white",
     p_y = 1.55,
-    s_x = 1,
-    s_y = 0.85,
-    s_width = 1.35,
-    s_height = 1.35,
+    s_x = 1,        # Center X
+    s_y = 1,        # Adjusted center Y to prevent vertical clipping
+    s_width = 1.0,  # Reduced from 1.35
+    s_height = 1.0, # Reduced from 1.35
     h_fill = "#1F3A5F",
     h_color = "#1F3A5F",
     url = "github.com/franciscolobo/LocAlign",
     u_color = "white",
     u_size = 4,
     u_y = 0.08,
-    filename = file.path(OUT_DIR, "localign_hexagonal_logo.png")
+    filename = file.path(OUT_DIR, "localign_hexagonal_logo.png"),
+    asp = 1,
+    white_around_sticker = TRUE
   )
 }
 
