@@ -11,7 +11,7 @@ panel_run_blast <- function() {
           `data-toggle` = "collapse",
           `data-parent` = "#taskAccordion",
           href = "#collapseRun",
-          "Run BLAST"
+          uiOutput("run_panel_title")
         )
       )
     ),
@@ -39,12 +39,13 @@ panel_run_blast <- function() {
           )
         ),
 
+        selectInput("aligner", "Aligner:", choices = c("BLAST", "DIAMOND"), selected = "BLAST"),
         selectInput("program", "Program:", choices = c("blastp", "blastx", "blastn", "tblastn")),
         selectInput("db", "Database:", choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")),
         selectInput("eval", "e-value:", choices = c(1, 0.001, 1e-4, 1e-5, 1e-10)),
 
         fluidRow(
-          column(6, actionButton("blast", "run BLAST")),
+          column(6, uiOutput("run_action_button")),
           column(6, downloadButton("download_report", "Download HTML report", class = "btn-primary"))
         ),
         fluidRow(
@@ -54,3 +55,4 @@ panel_run_blast <- function() {
     )
   )
 }
+

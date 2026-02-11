@@ -19,7 +19,7 @@
           "kind": "fasta",
           "filename": "test.fna.gz",
           "url": "file:///tmp/localign-db/test.fna.gz",
-          "sha256": "8c69a1e33d83748dbca0200a558123662dbf8f38baa30f0fff2499d342891bce"
+          "sha256": "804671819e4b5c865ddde770310259a3d24ccffa5e95674be83dda999d395442"
         }
       ],
       "post_download": {

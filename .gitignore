@@ -2,3 +2,6 @@
 installers/macos/dist/
 installers/**/*.app
 installers/**/*.zip
+
+#paper
+*.docx

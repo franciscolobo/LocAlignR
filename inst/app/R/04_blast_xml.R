@@ -84,18 +84,37 @@ run_blast_as_xml <- function(prog, query, db, eval, remote) {
 }
 
 parse_blast_xml_to_df <- function(xml_doc) {
-  results <- XML::xpathApply(xml_doc, "//Iteration", function(row) {
-    query_ID       <- XML::getNodeSet(row, "Iteration_query-def") %>% sapply(XML::xmlValue)
-    query_length   <- XML::getNodeSet(row, "Iteration_query-len") %>% sapply(XML::xmlValue)
-    hit_ID         <- XML::getNodeSet(row, "Iteration_hits//Hit//Hit_id") %>% sapply(XML::xmlValue)
-    bitscore       <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_bit-score") %>% sapply(XML::xmlValue)
-    eval           <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_evalue") %>% sapply(XML::xmlValue)
-    hsp_q_begin    <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
-    hsp_q_end      <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
+  # Always return a data.frame with these columns, even if there are no hits.
+  empty_df <- function() {
+    data.frame(
+      query_ID = character(),
+      hit_ID = character(),
+      hsp_q_begin = character(),
+      hsp_q_end = character(),
+      hit_length = character(),
+      query_fraction = character(),
+      bitscore = character(),
+      eval = character(),
+      stringsAsFactors = FALSE
+    )
+  }
 
-    # Note: kept identical to your current code (even though the variable names suggest "subject").
-    hsp_s_begin    <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
-    hsp_s_end      <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
+  results <- XML::xpathApply(xml_doc, "//Iteration", function(row) {
+    query_ID     <- XML::getNodeSet(row, "Iteration_query-def") %>% sapply(XML::xmlValue)
+    query_length <- XML::getNodeSet(row, "Iteration_query-len") %>% sapply(XML::xmlValue)
+    hit_ID       <- XML::getNodeSet(row, "Iteration_hits//Hit//Hit_id") %>% sapply(XML::xmlValue)
+
+    # No hits for this query
+    if (!length(hit_ID)) return(NULL)
+
+    bitscore    <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_bit-score") %>% sapply(XML::xmlValue)
+    eval        <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_evalue") %>% sapply(XML::xmlValue)
+    hsp_q_begin <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
+    hsp_q_end   <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
+
+    # Note: kept identical to your current code (even though variable names suggest "subject").
+    hsp_s_begin <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
+    hsp_s_end   <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
 
     eval <- suppressWarnings(as.numeric(eval))
     eval <- signif(eval, digits = 3)
@@ -105,10 +124,20 @@ parse_blast_xml_to_df <- function(xml_doc) {
 
     qfrac <- ifelse(is.finite(hit_length / qlen), round(hit_length / qlen, 2), NA_real_)
 
-    cbind(query_ID, hit_ID, hsp_q_begin, hsp_q_end, hit_length, query_fraction = qfrac, bitscore, eval)
+    as.data.frame(
+      cbind(query_ID, hit_ID, hsp_q_begin, hsp_q_end, hit_length,
+            query_fraction = qfrac, bitscore, eval),
+      stringsAsFactors = FALSE
+    )
   })
 
-  plyr::rbind.fill(lapply(results, function(y) as.data.frame(y, stringsAsFactors = FALSE)))
+  # Drop NULL entries (Iterations with no hits)
+  results <- Filter(Negate(is.null), results)
+
+  if (!length(results)) return(empty_df())
+
+  out <- plyr::rbind.fill(results)
+  if (is.null(out)) empty_df() else out
 }
 
 render_blast_results_dt <- function(df, subject_meta) {

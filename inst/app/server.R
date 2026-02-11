@@ -24,6 +24,8 @@ source("R/02_user_db_registry.R")
 source("R/03_alignment_rendering.R")
 source("R/04_blast_xml.R")
 source("R/05_makeblastdb.R")
+source("R/06_diamond_xml.R")
+source("R/07_aligner_dispatch.R")
 source("R/90_diagnostics.R", local = TRUE)
 
 
@@ -37,7 +39,18 @@ server <- function(input, output, session) {
   }
 
   wire_diagnostics(output)
-  
+
+  output$run_panel_title <- renderUI({
+    aligner <- toupper(input$aligner %||% "BLAST")
+    if (identical(aligner, "DIAMOND")) "Run DIAMOND" else "Run BLAST"
+  })
+
+  output$run_action_button <- renderUI({
+    aligner <- toupper(input$aligner %||% "BLAST")
+    lbl <- if (identical(aligner, "DIAMOND")) "run DIAMOND" else "run BLAST"
+    actionButton("blast", lbl)
+  })
+
   
   # ---------- Metadata load ----------
   subject_meta <- load_subject_meta(
@@ -58,21 +71,57 @@ server <- function(input, output, session) {
   
   db_registry <- reactiveVal(reg0)
   
-  # Allowed choices per program
-  allowed_db_choices <- function(program) {
+  # Allowed choices per program (aligner-aware, backward compatible)
+  allowed_db_choices <- function(program, aligner = NULL) {
     reg <- db_registry()
+    aligner <- toupper((aligner %||% "BLAST"))
+
+    if (identical(aligner, "DIAMOND")) {
+      # DIAMOND: only local .dmnd databases (by registry path)
+      return(reg$name[grepl("\\.dmnd$", reg$path, ignore.case = TRUE)])
+    }
+
+    # BLAST: existing behavior
     allowed_db_choices_for_program(reg, program)
   }
-  
-  # Dynamic DB choices
-  observeEvent(input$program, {
-    choices <- unique(allowed_db_choices(input$program))
+
+  observeEvent(list(input$program, input$aligner), {
+    aligner <- toupper(input$aligner %||% "BLAST")
+    choices <- unique(allowed_db_choices(input$program, aligner))
+
     if (!length(choices)) {
+      if (identical(aligner, "DIAMOND")) {
+        # No DIAMOND DBs registered: show empty to force registration/selection
+        updateSelectInput(session, "db", choices = character(0), selected = character(0))
+        return(invisible(NULL))
+      }
       choices <- if (input$program %in% c("blastn", "tblastn")) "nt" else "nr"
     }
-    updateSelectInput(session, "db", choices = choices, selected = choices[1])
+
+    sel <- input$db
+    if (is.null(sel) || !(sel %in% choices)) sel <- choices[1]
+    updateSelectInput(session, "db", choices = choices, selected = sel)
   }, ignoreInit = FALSE)
-  
+
+
+  # Dynamic DB choices
+  observeEvent(list(input$program, input$aligner), {
+    aligner <- toupper(input$aligner %||% "BLAST")
+    choices <- unique(allowed_db_choices(input$program, aligner))
+
+    if (!length(choices)) {
+      if (identical(aligner, "DIAMOND")) {
+        updateSelectInput(session, "db", choices = character(0), selected = character(0))
+        return(invisible(NULL))
+      }
+      choices <- if (input$program %in% c("blastn", "tblastn")) "nt" else "nr"
+    }
+
+    sel <- input$db
+    if (is.null(sel) || !(sel %in% choices)) sel <- choices[1]
+    updateSelectInput(session, "db", choices = choices, selected = sel)
+  }, ignoreInit = FALSE)
+ 
   # Cache for BLAST XML
   .cache <- new.env(parent = emptyenv())
   
@@ -102,50 +151,62 @@ server <- function(input, output, session) {
     }
   })
   
-  # ---- Run BLAST ----
+ # ---- Run alignment (BLAST or DIAMOND) ----
   blastresults <- eventReactive(input$blast, {
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = "Running BLAST...")
+    aligner <- toupper(input$aligner %||% "BLAST")
+    spinner_txt <- if (identical(aligner, "DIAMOND")) "Running DIAMOND..." else "Running BLAST..."
+    shinybusy::show_modal_spinner(spin = "fading-circle", text = spinner_txt)
     on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
-    
+
     validate_blast_inputs(input, use_upload = use_upload())
-    
-    prog <- match.arg(input$program, c("blastn", "tblastn", "blastp", "blastx"))
-    
-    db_res <- resolve_db_selection(
-      db_input   = input$db,
-      registry   = db_registry(),
-      program    = prog
-    )
-    
-    # Cache key depends on program, db choice, evalue, and query payload signature
+
+    prog_choices <- if (identical(aligner, "DIAMOND")) c("blastp", "blastx") else c("blastn", "tblastn", "blastp", "blastx")
+    prog <- match.arg(input$program, prog_choices)
+
+    # Resolve DB selection
+    if (identical(aligner, "DIAMOND")) {
+      reg <- db_registry()
+      row <- reg[match(input$db, reg$name), , drop = FALSE]
+        shiny::validate(
+        shiny::need(nrow(row) == 1 && nzchar(row$path), paste("Unknown DB:", input$db)),
+        shiny::need(grepl("\\.dmnd$", row$path, ignore.case = TRUE), "DIAMOND requires a .dmnd database.")
+      )
+      db_res <- list(db_path = row$path, remote = FALSE)
+    } else {
+      db_res <- resolve_db_selection(
+        db_input = input$db,
+        registry = db_registry(),
+        program  = prog
+      )
+    }
+
+    # Cache key depends on aligner too
     file_sig <- make_query_signature(input, use_upload = use_upload())
-    key <- digest::digest(list(prog, input$db, input$eval, file_sig))
-    
-    # Return cached XML if present
+    key <- digest::digest(list(aligner, prog, input$db, input$eval, file_sig))
+
     if (exists(key, envir = .cache)) {
       xml <- get(key, envir = .cache)
       xml_current(xml)
       return(xml)
     }
-    
-    # Ensure we have a FASTA file (temporary if needed)
+
     tmp_fa <- materialize_query_fasta(input, use_upload = use_upload())
     on.exit(tmp_fa$cleanup(), add = TRUE)
-    
-    # Run BLAST and parse XML
-    xml <- run_blast_as_xml(
-      prog   = prog,
-      query  = tmp_fa$path,
-      db     = db_res$db_path,
-      eval   = input$eval,
-      remote = db_res$remote
+
+    xml <- run_aligner_as_xml(
+      aligner     = aligner,
+      program     = prog,
+      query_fasta = tmp_fa$path,
+      db          = db_res$db_path,
+      evalue      = input$eval,
+      remote      = db_res$remote
     )
-    
+
     assign(key, xml, envir = .cache)
     xml_current(xml)
     xml
   }, ignoreNULL = TRUE)
-  
+ 
   observeEvent(input$blast, {
     invisible(blastresults())
   })
@@ -198,9 +259,9 @@ server <- function(input, output, session) {
   
   # ---- Report download (uses current XML) ----
   output$download_report <- downloadHandler(
-    filename = function() paste0("blast_report_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html"),
+    filename = function() paste0("align_report_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html"),
     content = function(file) {
-      x  <- isolate(xml_current()); validate(need(!is.null(x), "Load or run BLAST first."))
+      x  <- isolate(xml_current()); validate(need(!is.null(x), "Load or run alignment first."))
       df <- isolate(parsedresults()); validate(need(nrow(df) > 0, "No results to export."))
       
       build_and_save_html_report(
@@ -214,9 +275,9 @@ server <- function(input, output, session) {
   
   # ---- Download raw BLAST XML ----
   output$download_xml <- downloadHandler(
-    filename = function() paste0("blast_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xml"),
+    filename = function() paste0("align_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xml"),
     content  = function(file) {
-      doc <- isolate(xml_current()); validate(need(!is.null(doc), "No BLAST XML available"))
+      doc <- isolate(xml_current()); validate(need(!is.null(doc), "No alignment XML available"))
       XML::saveXML(doc, file = file)
     }
   )
@@ -234,7 +295,7 @@ server <- function(input, output, session) {
       input          = input,
       cfg            = cfg,
       db_registry    = db_registry,
-      allowed_db_fun = allowed_db_choices,
+      allowed_db_fun = function(program) allowed_db_choices(program, aligner = "BLAST"),
       session        = session,
       append_log     = append_make_log
     )
