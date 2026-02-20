@@ -26,8 +26,8 @@ MINIFORGE_VERSION="25.3.1-0"        # choose a version and keep it pinned
 MINIFORGE_PREFIX="$HOME/miniforge3" # install location
 
 # Fill these after you decide the exact installer build:
-MINIFORGE_SHA256_ARM64="REPLACE_WITH_SHA256"
-MINIFORGE_SHA256_X86_64="REPLACE_WITH_SHA256"
+MINIFORGE_SHA256_ARM64="d9eabd1868030589a1d74017b8723b01cf81b5fec1b9da8021b6fa44be7bbeae"
+MINIFORGE_SHA256_X86_64="6c09a3550bb65bdb6d3db6f6c2b890b987b57189f3b71c67a5af49943d2522e8"
 
 # Manifest path
 MANIFEST="$(cd "$(dirname "$0")" && pwd)/db_manifest.json"
@@ -214,9 +214,9 @@ if [[ -z "$CONDA_BIN" ]]; then
   exit 1
 fi
 
-# Quick env existence check (more helpful than failing later)
-if ! "$CONDA_BIN" env list 2>/dev/null | awk '{print $1}' | grep -qx "$ENV_NAME"; then
-  osascript -e "display dialog \"LocAlign conda environment '$ENV_NAME' was not found. Re-run the LocAlign installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
+# Tool-agnostic env check: try a trivial command inside the env.
+if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e '1' >/dev/null 2>&1; then
+  osascript -e "display dialog \"LocAlign environment '$ENV_NAME' was not found or is broken. Re-run the LocAlign installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
   exit 1
 fi
 
@@ -312,7 +312,6 @@ fi
 # ----------------------------
 say "== Step 2/4: Installing LocAlign into a conda environment =="
 
-ENV_NAME="localign"
 require_continue "LocAlign will be installed into conda environment: ${ENV_NAME}
 
 Continue?"

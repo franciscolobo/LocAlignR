@@ -60,11 +60,21 @@ cp -R "$MACOS_DIR/payload/"* "$APP/Contents/Resources/payload/"
 chmod +x "$APP/Contents/Resources/payload/install.sh"
 
 # Zip
+# Zip
 mkdir -p "$DIST"
 cd "$DIST"
-ditto -c -k --sequesterRsrc --keepParent "LocAlign Installer.app" "LocAlign-Installer-macOS.zip"
+
+for ZIP_NAME in \
+  "LocAlign-Installer-macOS-arm64.zip" \
+  "LocAlign-Installer-macOS-x86_64.zip"
+do
+  rm -f "$ZIP_NAME"
+  ditto -c -k --sequesterRsrc --keepParent "LocAlign Installer.app" "$ZIP_NAME"
+done
+
 cd "$ROOT"
 
 echo "Built:"
 echo "  $APP"
-echo "  $DIST/LocAlign-Installer-macOS.zip"
+echo "  $DIST/LocAlign-Installer-macOS-arm64.zip"
+echo "  $DIST/LocAlign-Installer-macOS-x86_64.zip"
