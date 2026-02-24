@@ -1,8 +1,8 @@
 #!/usr/bin/env Rscript
 
 # logo.R
-# LocAlign hex sticker generation using hexSticker + ggplot2
-# LocAlign logo & banner using ggplot2
+# LocAlignR hex sticker generation using hexSticker + ggplot2
+# LocAlignR logo & banner using ggplot2
 
 # ----------------------------
 # Functions
@@ -14,7 +14,7 @@ save_square_logo <- function(plot) {
   p <- plot
 
   p <- p +
-  ggplot2::annotate("text", x = 0.5, y = 0.06, label = "LocAlign", size = 10, fontface = "bold", color = "white")
+  ggplot2::annotate("text", x = 0.5, y = 0.06, label = "LocAlignR", size = 10, fontface = "bold", color = "white")
 
   ggplot2::ggsave(
     filename = out_file,
@@ -35,7 +35,7 @@ save_banner_logo <- function(plot) {
    
   p <- plot
   p <- p +
-  ggplot2::annotate("text", x = 0.05, y = 0.92, label = "LocAlign", hjust = 0, size = 10, fontface = "bold", color = "white")
+  ggplot2::annotate("text", x = 0.05, y = 0.92, label = "LocAlignR", hjust = 0, size = 10, fontface = "bold", color = "white")
 
   ggplot2::ggsave(
     filename = out_file,
@@ -77,7 +77,7 @@ make_sticker_alignment_lines <- function(plot) {
 
   hexSticker::sticker(
     subplot = plot,
-    package = "LocAlign",
+    package = "LocAlignR",
     p_size = 18,
     p_color = "white",
     p_y = 1.55,
@@ -87,7 +87,7 @@ make_sticker_alignment_lines <- function(plot) {
     s_height = 1.0, # Reduced from 1.35
     h_fill = "#1F3A5F",
     h_color = "#1F3A5F",
-    url = "github.com/franciscolobo/LocAlign",
+    url = "github.com/franciscolobo/LocAlignR",
     u_color = "white",
     u_size = 4,
     u_y = 0.08,

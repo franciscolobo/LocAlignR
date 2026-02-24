@@ -2,13 +2,13 @@
 
 # scripts/check_install.R
 #
-# LocAlign installation smoke test.
+# LocAlignR installation smoke test.
 # Run from the REPO ROOT:
 #   Rscript scripts/check_install.R
 #
 # What it checks:
 #   1) R + key R packages (optionally via renv restore)
-#   2) LocAlign app folder exists and core files are present
+#   2) LocAlignR app folder exists and core files are present
 #   3) External tools: BLAST (required) and DIAMOND (optional)
 #      - Tool discovery order: env var -> PATH
 #   4) Basic commands run: blastp -version, makeblastdb -version, diamond version
@@ -100,7 +100,7 @@ check_r_packages <- function(pkgs) {
 
 # ---- Start ----
 
-cat_line("LocAlign installation check")
+cat_line("LocAlignR installation check")
 cat_line("R version: ", R.version.string)
 cat_line("Working directory: ", normalizePath(getwd(), winslash = "/"))
 

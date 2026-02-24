@@ -4,7 +4,7 @@
 wire_diagnostics <- function(output) {
 
   tool_report <- function(tool, env_var, args) {
-    p <- LocAlign::localign_find_tool(tool, env_var = env_var)
+    p <- LocAlignR::localignr_find_tool(tool, env_var = env_var)
     if (!nzchar(p)) {
       return(paste0("NOT FOUND (activate conda env or set ", env_var, ")"))
     }

@@ -28,7 +28,7 @@ run_makeblastdb_and_register <- function(input,
   append_log("[makeblastdb] cmd: makeblastdb %s", paste(shQuote(args), collapse = " "))
 
   # Conda-first tool discovery: prefer PATH, allow override via LOCALIGN_MAKEBLASTDB
-  makeblastdb_path <- LocAlign::localign_find_tool("makeblastdb", env_var = "LOCALIGN_MAKEBLASTDB")
+  makeblastdb_path <- LocAlignR::localignr_find_tool("makeblastdb", env_var = "LOCALIGN_MAKEBLASTDB")
 
   validate(
     need(

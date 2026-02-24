@@ -2,7 +2,7 @@
 
 # Persistent registry location (cross-platform, writable)
 user_db_file <- local({
-  d <- file.path(rappdirs::user_config_dir("LocAlign"), "config")
+  d <- file.path(rappdirs::user_config_dir("LocAlignR"), "config")
   dir.create(d, recursive = TRUE, showWarnings = FALSE)
   file.path(d, "user_dbs.yml")
 })

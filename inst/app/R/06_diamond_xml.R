@@ -3,7 +3,7 @@
 run_diamond_as_xml <- function(mode, query, db, eval, max_target_seqs = 10L, timeout = 600) {
   mode <- match.arg(mode, c("blastp", "blastx"))
 
-  diamond_path <- LocAlign::localign_find_tool("diamond", env_var = "LOCALIGN_DIAMOND")
+  diamond_path <- LocAlignR::localignr_find_tool("diamond", env_var = "LOCALIGN_DIAMOND")
   shiny::validate(
     shiny::need(
       nzchar(diamond_path),

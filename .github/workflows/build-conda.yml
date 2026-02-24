@@ -1,0 +1,148 @@
+name: Build and Upload Conda Package
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'  # Triggers on version tags like v0.1.2
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to build (leave empty to use current)'
+        required: false
+        type: string
+      label:
+        description: 'Anaconda upload label'
+        required: false
+        default: 'main'
+        type: choice
+        options:
+          - main
+          - dev
+          - test
+      skip_upload:
+        description: 'Skip upload (build only)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-latest, macos-13]  # macos-latest=ARM, macos-13=Intel
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Miniconda
+        uses: conda-incubator/setup-miniconda@v3
+        with:
+          auto-update-conda: true
+          python-version: "3.11"
+          channels: conda-forge,bioconda,franciscolobo
+          channel-priority: strict
+          miniforge-version: latest
+      
+      - name: Configure conda channels
+        shell: bash -l {0}
+        run: |
+          conda config --remove channels defaults || true
+          conda config --add channels franciscolobo
+          conda config --add channels bioconda
+          conda config --add channels conda-forge
+          conda config --set channel_priority strict
+      
+      - name: Install build dependencies
+        shell: bash -l {0}
+        run: |
+          conda install -y -c conda-forge \
+            conda-build=3.28 \
+            boa=0.17 \
+            anaconda-client
+      
+      - name: Extract version from tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: tag_version
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/v}
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+      
+      - name: Update version in recipe
+        if: steps.tag_version.outputs.version || github.event.inputs.version
+        shell: bash -l {0}
+        run: |
+          VERSION="${{ steps.tag_version.outputs.version || github.event.inputs.version }}"
+          sed -i.bak -E "s/(version:).*/\1 $VERSION/" recipe/meta.yaml
+          sed -i.bak -E "s/(number:).*/\1 0/" recipe/meta.yaml
+          rm -f recipe/meta.yaml.bak
+          echo "Updated to version $VERSION"
+      
+      - name: Build conda package
+        shell: bash -l {0}
+        run: |
+          conda mambabuild --override-channels \
+            -c conda-forge -c bioconda -c franciscolobo \
+            recipe
+      
+      - name: Get package path
+        id: package_path
+        shell: bash -l {0}
+        run: |
+          PACKAGE_PATH=$(conda build recipe --output)
+          echo "path=$PACKAGE_PATH" >> $GITHUB_OUTPUT
+          echo "Package built at: $PACKAGE_PATH"
+      
+      - name: Upload to Anaconda.org
+        if: ${{ !github.event.inputs.skip_upload }}
+        shell: bash -l {0}
+        env:
+          ANACONDA_API_TOKEN: ${{ secrets.ANACONDA_API_TOKEN }}
+        run: |
+          LABEL="${{ github.event.inputs.label || 'main' }}"
+          if [ "$LABEL" = "main" ]; then
+            anaconda -t $ANACONDA_API_TOKEN upload "${{ steps.package_path.outputs.path }}"
+          else
+            anaconda -t $ANACONDA_API_TOKEN upload --label "$LABEL" "${{ steps.package_path.outputs.path }}"
+          fi
+      
+      - name: Test installation
+        if: ${{ !github.event.inputs.skip_upload }}
+        shell: bash -l {0}
+        run: |
+          # Wait for conda to index
+          sleep 10
+          
+          # Create test environment
+          conda create -n test-install -y \
+            --override-channels \
+            -c conda-forge -c bioconda -c franciscolobo \
+            r-localignr
+          
+          # Verify installation
+          conda run -n test-install R --quiet --vanilla -e \
+            "packageVersion('LocAlignR')"
+          
+          # Cleanup
+          conda env remove -n test-install -y
+      
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: conda-package-${{ matrix.os }}
+          path: ${{ steps.package_path.outputs.path }}
+          retention-days: 7
+
+  notify:
+    needs: build
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Build summary
+        run: |
+          echo "### Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ${{ needs.build.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ github.event.inputs.version || 'from recipe' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Label**: ${{ github.event.inputs.label || 'main' }}" >> $GITHUB_STEP_SUMMARY

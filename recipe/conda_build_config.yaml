@@ -1,6 +1,7 @@
-r_base:
-  - "4.4"   # pick a modern R available on conda-forge for osx-arm64
+# Channel configuration for conda-build
+channel_sources:
+  - conda-forge,bioconda
 
-# Optional: silence the numpy warning (not required for your recipe)
-numpy:
-  - "1.26"
+# Channel targets for upload (optional)
+channel_targets:
+  - franciscolobo main

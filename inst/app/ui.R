@@ -16,7 +16,7 @@ ui <- fluidPage(
   theme = shinytheme("cerulean"),
   localign_head(),
   
-  titlePanel("LocAlign"),
+  titlePanel("LocAlignR"),
   
   sidebarLayout(
     sidebarPanel(

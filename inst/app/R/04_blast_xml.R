@@ -61,7 +61,7 @@ run_blast_as_xml <- function(prog, query, db, eval, remote) {
     args <- c(args, "-num_threads", threads)
   }
   # Conda-first tool discovery: prefer PATH, allow override via LOCALIGN_<PROG>
-  prog_path <- LocAlign::localign_find_tool(prog, env_var = paste0("LOCALIGN_", toupper(prog)))
+  prog_path <- LocAlignR::localignr_find_tool(prog, env_var = paste0("LOCALIGN_", toupper(prog)))
 
   # Validate early with a clear message for cross-platform installs
   validate(

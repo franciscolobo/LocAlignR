@@ -1,4 +1,4 @@
-Package: LocAlign
+Package: LocAlignR
 Type: Package
 Title: Local Sequence Alignment via Shiny
 Version: 0.1.0
@@ -11,8 +11,20 @@ Description: A cross-platform Shiny application for running local sequence
     local BLAST databases.
 License: MIT + file LICENSE
 Encoding: UTF-8
-Roxygen: list(markdown = TRUE)
-RoxygenNote: 7.3.2
 Imports:
     shiny,
-    rappdirs
+    rappdirs,
+    shinythemes,
+    DT,
+    shinyFiles,
+    shinybusy,
+    XML,
+    plyr,
+    dplyr,
+    yaml,
+    processx,
+    digest,
+    htmltools,
+    htmlwidgets
+Suggests:
+    pkgload

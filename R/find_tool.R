@@ -4,7 +4,7 @@
 #   2) Optional env var override (e.g. LOCALIGN_MAKEBLASTDB)
 # Returns a normalized absolute path or "".
 
-localign_find_tool <- function(tool, env_var = NULL) {
+localignr_find_tool <- function(tool, env_var = NULL) {
   is_windows <- identical(.Platform$OS.type, "windows")
 
   normalize_tool_name <- function(x) {

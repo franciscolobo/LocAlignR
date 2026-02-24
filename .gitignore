@@ -5,3 +5,9 @@ installers/**/*.zip
 
 #paper
 *.docx
+
+# Build automation
+.env
+*.tar.bz2
+conda-bld/
+.DS_Store

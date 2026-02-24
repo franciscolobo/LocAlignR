@@ -1,6 +1,6 @@
 # R/run_app.R
 
-#' Run the LocAlign Shiny app
+#' Run the LocAlignR Shiny app
 #'
 #' @param launch.browser Logical. If TRUE, open the app in a browser.
 #' @param ... Passed to shiny::runApp().
@@ -12,7 +12,7 @@ run_app <- function(launch.browser = TRUE, ...) {
   }
 
   # Prefer installed location (R CMD INSTALL / conda-installed package)
-  app_dir <- system.file("app", package = "LocAlign")
+  app_dir <- system.file("app", package = "LocAlignR")
 
   # Fallback for devtools::load_all(): try to locate the package source tree
   if (!nzchar(app_dir) || !dir.exists(app_dir)) {
@@ -20,7 +20,7 @@ run_app <- function(launch.browser = TRUE, ...) {
 
     # pkgload knows where the source tree is during devtools::load_all()
     if (requireNamespace("pkgload", quietly = TRUE)) {
-      dev_root <- tryCatch(pkgload::pkg_path("LocAlign"), error = function(e) NULL)
+      dev_root <- tryCatch(pkgload::pkg_path("LocAlignR"), error = function(e) NULL)
     }
 
     # Last resort: assume current working directory is the repo root
@@ -33,7 +33,7 @@ run_app <- function(launch.browser = TRUE, ...) {
 
   if (!dir.exists(app_dir)) {
     stop(
-      "LocAlign app directory not found. Expected 'inst/app' at the package root.",
+      "LocAlignR app directory not found. Expected 'inst/app' at the package root.",
       call. = FALSE
     )
   }
