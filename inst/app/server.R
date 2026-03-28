@@ -313,6 +313,32 @@ server <- function(input, output, session) {
   
   output$make_log <- renderText(make_log())
   
+  # ---- Output-directory chooser for DB building ----
+  make_dir_roots <- build_shinyfiles_volumes()
+  
+  shinyFiles::shinyDirChoose(
+    input = input,
+    id = "make_outdir_browse",
+    roots = make_dir_roots,
+    session = session,
+    allowDirCreate = TRUE
+  )
+  
+  observeEvent(input$make_outdir_browse, {
+    sel <- tryCatch(
+      shinyFiles::parseDirPath(make_dir_roots, input$make_outdir_browse),
+      error = function(e) character(0)
+    )
+    
+    if (length(sel) == 1 && !is.na(sel) && nzchar(sel)) {
+      updateTextInput(
+        session = session,
+        inputId = "make_outdir",
+        value = normalizePath(sel, winslash = "/", mustWork = FALSE)
+      )
+    }
+  }, ignoreInit = TRUE)
+  
   observeEvent(input$make_run, {
     run_makeblastdb_and_register(
       input          = input,

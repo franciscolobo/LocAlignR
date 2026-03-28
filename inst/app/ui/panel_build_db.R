@@ -47,11 +47,25 @@ panel_build_db <- function() {
         textInput("make_title", "Title"),
         checkboxInput("make_parse", "Parse SeqIDs", value = TRUE),
         
-        textInput(
-          "make_outdir",
-          "Output directory",
-          value = "",
-          placeholder = "Leave empty to use the current working directory, or paste a full path"
+        fluidRow(
+          column(
+            width = 9,
+            textInput(
+              "make_outdir",
+              "Output directory",
+              value = "",
+              placeholder = "Leave empty to use the current working directory, or paste a full path"
+            )
+          ),
+          column(
+            width = 3,
+            tags$label(" "),
+            shinyFiles::shinyDirButton(
+              id = "make_outdir_browse",
+              label = "Browse...",
+              title = "Select output directory"
+            )
+          )
         ),
         
         tags$small(
