@@ -6,7 +6,7 @@ library(DT)
 library(shinyFiles)
 
 source("ui/head.R", local = FALSE)
-source("ui/panel_run_blast.R", local = FALSE)
+source("ui/panel_run_aligner.R", local = FALSE)
 source("ui/panel_load_xml.R", local = FALSE)
 source("ui/panel_build_db.R", local = FALSE)
 source("ui/diagnostics_tab.R", local = FALSE)

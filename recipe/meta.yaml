@@ -1,6 +1,6 @@
 {% set name = "r-localignr" %}
-{% set version = "0.1.0" %}
-{% set build = 1 %}
+{% set version = "0.1.1" %}
+{% set build = 0 %}
 
 package:
   name: {{ name|lower }}

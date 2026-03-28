@@ -13,13 +13,13 @@ USER_DB_YML="${USER_CFG_DIR}/user_dbs.yml"
 # Keep this order: conda-forge first, then bioconda, then your channel, with strict priority.
 CF="conda-forge"
 BC="bioconda"
-MYCHAN="franciscolobo"   # e.g. "localign" or your org channel
+MYCHAN="franciscolobo"   # e.g. "localignr" or your org channel
 
 # Package name in conda
-PKG="r-localign"
+PKG="r-localignr"
 
 # Conda environment name
-ENV_NAME="localign"
+ENV_NAME="localignr"
 
 # Miniforge bootstrap (when conda is missing)
 MINIFORGE_VERSION="25.3.1-0"        # choose a version and keep it pinned
@@ -141,9 +141,9 @@ yaml_upsert_db() {
 }
 
 create_gui_launcher() {
-  # Creates ~/Applications/LocAlign.app
+  # Creates ~/Applications/LocAlignR.app
   local target_dir="$HOME/Applications"
-  local app="$target_dir/LocAlign.app"
+  local app="$target_dir/LocAlignR.app"
   local contents="$app/Contents"
   local macos="$contents/MacOS"
 
@@ -157,13 +157,13 @@ create_gui_launcher() {
 <plist version="1.0">
   <dict>
     <key>CFBundleName</key>
-    <string>LocAlign</string>
+    <string>LocAlignR</string>
     <key>CFBundleDisplayName</key>
-    <string>LocAlign</string>
+    <string>LocAlignR</string>
 
     <!-- Use a stable reverse-DNS identifier you control -->
     <key>CFBundleIdentifier</key>
-    <string>io.github.franciscolobo.localign</string>
+    <string>io.github.franciscolobo.localignr</string>
 
     <key>CFBundleVersion</key>
     <string>0.1.0</string>
@@ -173,7 +173,7 @@ create_gui_launcher() {
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>LocAlign</string>
+    <string>LocAlignR</string>
 
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
@@ -184,12 +184,12 @@ create_gui_launcher() {
 </plist>
 PLIST
 
-  cat > "$macos/LocAlign" <<'SH'
+  cat > "$macos/LocAlignR" <<'SH'
 #!/bin/zsh
 set -euo pipefail
 
-APP_NAME="LocAlign"
-ENV_NAME="localign"
+APP_NAME="LocAlignR"
+ENV_NAME="localignr"
 
 # Prefer explicit installs, then PATH
 CANDIDATES=(
@@ -210,30 +210,30 @@ for c in "${CANDIDATES[@]}"; do
 done
 
 if [[ -z "$CONDA_BIN" ]]; then
-  osascript -e 'display dialog "LocAlign could not find conda/mamba/micromamba. Re-run the LocAlign installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
+  osascript -e 'display dialog "LocAlignR could not find conda/mamba/micromamba. Re-run the LocAlignR installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
   exit 1
 fi
 
 # Tool-agnostic env check: try a trivial command inside the env.
 if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e '1' >/dev/null 2>&1; then
-  osascript -e "display dialog \"LocAlign environment '$ENV_NAME' was not found or is broken. Re-run the LocAlign installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
+  osascript -e "display dialog \"LocAlignR environment '$ENV_NAME' was not found or is broken. Re-run the LocAlignR installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
   exit 1
 fi
 
-# Sanity check: LocAlign installed?
-if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'packageVersion("LocAlign")' >/dev/null 2>&1; then
-  osascript -e 'display dialog "LocAlign is not installed in the conda environment (localign). Re-run the LocAlign installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
+# Sanity check: LocAlignR installed?
+if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'packageVersion("LocAlignR")' >/dev/null 2>&1; then
+  osascript -e 'display dialog "LocAlignR is not installed in the conda environment (localignr). Re-run the LocAlignR installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
   exit 1
 fi
 
 # Tell the user what will happen (helps with the "nothing happened" feeling)
-osascript -e 'display dialog "Starting LocAlign.\n\nA browser window will open in a few seconds.\n\nTo stop LocAlign, quit this app." buttons {"OK"} default button 1' >/dev/null 2>&1 || true
+osascript -e 'display dialog "Starting LocAlignR.\n\nA browser window will open in a few seconds.\n\nTo stop LocAlignR, quit this app." buttons {"OK"} default button 1' >/dev/null 2>&1 || true
 
 # Launch the Shiny app
-exec "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'LocAlign::run_app()'
+exec "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'LocAlignR::run_app()'
 SH
 
-  chmod +x "$macos/LocAlign" || die "Failed to make launcher executable."
+  chmod +x "$macos/LocAlignR" || die "Failed to make launcher executable."
   touch "$app"
   say "Created GUI launcher: $app"
 }
@@ -242,11 +242,11 @@ SH
 # ----------------------------
 # Step 0: intro
 # ----------------------------
-require_continue "This installer will set up LocAlign on your Mac.
+require_continue "This installer will set up LocAlignR on your Mac.
 
 Steps:
 1) Install micromamba/conda if needed
-2) Create a conda environment and install LocAlign
+2) Create a conda environment and install LocAlignR
 3) Optionally download curated databases
 4) Optionally format and register databases
 
@@ -308,11 +308,11 @@ else
 fi
 
 # ----------------------------
-# Step 2: create env + install LocAlign
+# Step 2: create env + install LocAlignR
 # ----------------------------
-say "== Step 2/4: Installing LocAlign into a conda environment =="
+say "== Step 2/4: Installing LocAlignR into a conda environment =="
 
-require_continue "LocAlign will be installed into conda environment: ${ENV_NAME}
+require_continue "LocAlignR will be installed into conda environment: ${ENV_NAME}
 
 Continue?"
 
@@ -409,7 +409,7 @@ fi
 # ----------------------------
 say "== Step 4/4: Optional formatting and registration =="
 
-if ask_yes_no "Would you like to format downloaded databases and register them for LocAlign now?"; then
+if ask_yes_no "Would you like to format downloaded databases and register them for LocAlignR now?"; then
   require_continue "This step can run makeblastdb and/or diamond, then update:
 ${USER_DB_YML}
 
@@ -475,31 +475,31 @@ fi
 # ----------------------------
 # Step 5: optionally create launcher app
 # ----------------------------
-say "== Step 5/5: create LocAlign launcher app =="
+say "== Step 5/5: create LocAlignR launcher app =="
 
-if ask_yes_no "Would you like to create a LocAlign launcher app in ~/Applications (double-click to run)?"; then
+if ask_yes_no "Would you like to create a LocAlignR launcher app in ~/Applications (double-click to run)?"; then
   create_gui_launcher
 fi
 
 
 # ----------------------------
-# Final: optionally launch LocAlign now (GUI)
+# Final: optionally launch LocAlignR now (GUI)
 # ----------------------------
 if ask_yes_no "Installation steps completed.
 
-Would you like to launch LocAlign now?"; then
-  say "Launching LocAlign (GUI)..."
+Would you like to launch LocAlignR now?"; then
+  say "Launching LocAlignR (GUI)..."
 
-  LAUNCHER_APP="$HOME/Applications/LocAlign.app"
+  LAUNCHER_APP="$HOME/Applications/LocAlignR.app"
 
   # If the launcher does not exist, offer to create it now
   if [[ ! -d "$LAUNCHER_APP" ]]; then
-    if ask_yes_no "LocAlign launcher app was not found in ~/Applications.
+    if ask_yes_no "LocAlignR launcher app was not found in ~/Applications.
 
 Create it now?"; then
       create_gui_launcher
     else
-      die "Launcher app not found. Re-run installer and create the launcher, or run LocAlign from Terminal."
+      die "Launcher app not found. Re-run installer and create the launcher, or run LocAlignR from Terminal."
     fi
   fi
 
@@ -508,8 +508,8 @@ Create it now?"; then
 
 else
   say ""
-  say "Done. To run LocAlign later:"
-  say "  Double-click: ~/Applications/LocAlign.app"
-  say "  Or (Terminal): $CONDA_BIN run -n ${ENV_NAME} R -q -e 'LocAlign::run_app()'"
+  say "Done. To run LocAlignR later:"
+  say "  Double-click: ~/Applications/LocAlignR.app"
+  say "  Or (Terminal): $CONDA_BIN run -n ${ENV_NAME} R -q -e 'LocAlignR::run_app()'"
   say ""
 fi

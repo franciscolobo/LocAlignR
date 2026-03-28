@@ -1,4 +1,4 @@
-# app/ui/panel_run_blast.R
+# app/ui/panel_run_aligner.R
 
 panel_run_blast <- function() {
   div(
@@ -49,7 +49,7 @@ panel_run_blast <- function() {
           column(6, downloadButton("download_report", "Download HTML report", class = "btn-primary"))
         ),
         fluidRow(
-          column(12, downloadButton("download_xml", "Download BLAST XML"))
+          column(12, downloadButton("download_xml", "Download XML"))
         )
       )
     )

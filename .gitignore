@@ -11,3 +11,4 @@ installers/**/*.zip
 *.tar.bz2
 conda-bld/
 .DS_Store
+._*

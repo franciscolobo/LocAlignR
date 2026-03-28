@@ -4,7 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 MACOS_DIR="$ROOT/installers/macos"
 DIST="$MACOS_DIR/dist"
-APP="$DIST/LocAlign Installer.app"
+APP="$DIST/LocAlignR Installer.app"
 
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources/payload"
@@ -16,11 +16,11 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 <plist version="1.0">
   <dict>
     <key>CFBundleName</key>
-    <string>LocAlign Installer</string>
+    <string>LocAlignR Installer</string>
     <key>CFBundleDisplayName</key>
-    <string>LocAlign Installer</string>
+    <string>LocAlignR Installer</string>
     <key>CFBundleIdentifier</key>
-    <string>org.localign.installer</string>
+    <string>org.localignr.installer</string>
     <key>CFBundleVersion</key>
     <string>0.1.0</string>
     <key>CFBundleShortVersionString</key>
@@ -28,7 +28,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
-    <string>LocAlignInstaller</string>
+    <string>LocAlignRInstaller</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
   </dict>
@@ -36,7 +36,7 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
 PLIST
 
 # Launcher
-cat > "$APP/Contents/MacOS/LocAlignInstaller" <<'SH'
+cat > "$APP/Contents/MacOS/LocAlignRInstaller" <<'SH'
 #!/bin/zsh
 set -euo pipefail
 
@@ -53,7 +53,7 @@ chmod +x "$SCRIPT" 2>/dev/null || true
 open -a Terminal "$SCRIPT"
 exit 0
 SH
-chmod +x "$APP/Contents/MacOS/LocAlignInstaller"
+chmod +x "$APP/Contents/MacOS/LocAlignRInstaller"
 
 # Payload
 cp -R "$MACOS_DIR/payload/"* "$APP/Contents/Resources/payload/"
@@ -65,16 +65,16 @@ mkdir -p "$DIST"
 cd "$DIST"
 
 for ZIP_NAME in \
-  "LocAlign-Installer-macOS-arm64.zip" \
-  "LocAlign-Installer-macOS-x86_64.zip"
+  "LocAlignR-Installer-macOS-arm64.zip" \
+  "LocAlignR-Installer-macOS-x86_64.zip"
 do
   rm -f "$ZIP_NAME"
-  ditto -c -k --sequesterRsrc --keepParent "LocAlign Installer.app" "$ZIP_NAME"
+  ditto -c -k --sequesterRsrc --keepParent "LocAlignR Installer.app" "$ZIP_NAME"
 done
 
 cd "$ROOT"
 
 echo "Built:"
 echo "  $APP"
-echo "  $DIST/LocAlign-Installer-macOS-arm64.zip"
-echo "  $DIST/LocAlign-Installer-macOS-x86_64.zip"
+echo "  $DIST/LocAlignR-Installer-macOS-arm64.zip"
+echo "  $DIST/LocAlignR-Installer-macOS-x86_64.zip"
