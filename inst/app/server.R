@@ -123,24 +123,34 @@ server <- function(input, output, session) {
       file.exists(input$fasta$datapath)
   })
   
-  # ---------- shinyFiles directory picker wiring ----------
-  volumes <- build_shinyfiles_volumes()
-  shinyFiles::shinyDirChoose(
-    input, "make_outdir_browse",
-    roots = volumes, session = session, allowDirCreate = TRUE
-  )
-  
-  output$make_outdir_selected <- renderText({
-    input$make_outdir
-  })
-  
-  observeEvent(input$make_outdir_browse, {
-    sel <- shinyFiles::parseDirPath(volumes, input$make_outdir_browse)
-    if (length(sel) == 1 && nzchar(sel)) {
-      path <- normalizePath(sel, winslash = "/", mustWork = FALSE)
-      updateTextInput(session, "make_outdir", value = path)
+  # ---- Keep DB builder backend compatible with molecule type ----
+  observeEvent(input$make_type, {
+    req(input$make_type)
+    
+    if (identical(input$make_type, "nucl")) {
+      updateSelectInput(
+        session,
+        "make_backend",
+        choices = c("BLAST" = "blast"),
+        selected = "blast"
+      )
+    } else {
+      selected <- input$make_backend
+      valid_choices <- c("BLAST" = "blast", "DIAMOND" = "diamond")
+      
+      if (is.null(selected) || !(selected %in% unname(valid_choices))) {
+        selected <- "blast"
+      }
+      
+      updateSelectInput(
+        session,
+        "make_backend",
+        choices = valid_choices,
+        selected = selected
+      )
     }
-  })
+  }, ignoreInit = FALSE)
+  
   # ---- Keep DB builder backend compatible with molecule type ----
   observeEvent(input$make_type, {
     req(input$make_type)

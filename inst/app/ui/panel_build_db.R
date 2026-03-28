@@ -1,3 +1,5 @@
+# app/ui/panel_build_db.R
+
 panel_build_db <- function() {
   div(
     class = "panel panel-default",
@@ -8,31 +10,25 @@ panel_build_db <- function() {
         a(
           `data-toggle` = "collapse",
           `data-parent` = "#taskAccordion",
-          href = "#collapseBuildDb",
-          "Build local database"
+          href = "#collapseMake",
+          "Build local sequence database"
         )
       )
     ),
     div(
-      id = "collapseBuildDb",
+      id = "collapseMake",
       class = "panel-collapse collapse",
       div(
         class = "panel-body",
         
-        textInput("make_name", "Database name"),
-        
-        textInput(
-          "make_title",
-          "Database title",
-          value = ""
-        ),
-        
         fileInput(
           "make_fasta",
-          "FASTA file",
+          "Input FASTA for DB",
           multiple = FALSE,
-          accept = c(".fa", ".faa", ".fasta", ".fas", ".fna", ".txt")
+          accept = c(".fa", ".fasta", ".faa", ".fas", ".fna", ".txt")
         ),
+        
+        textInput("make_name", "Database name"),
         
         selectInput(
           "make_type",
@@ -48,27 +44,15 @@ panel_build_db <- function() {
           selected = "blast"
         ),
         
-        checkboxInput(
-          "make_parse",
-          "Parse SeqIDs",
-          value = TRUE
-        ),
+        textInput("make_title", "Title"),
+        checkboxInput("make_parse", "Parse SeqIDs", value = TRUE),
         
         textInput(
           "make_outdir",
           "Output directory",
-          value = ""
+          value = "",
+          placeholder = "Leave empty to use the current working directory, or paste a full path"
         ),
-        
-        shinyFilesButton(
-          "make_outdir_browse",
-          "Browse...",
-          "Select output directory",
-          multiple = FALSE
-        ),
-        
-        br(),
-        textOutput("make_outdir_selected"),
         
         tags$small(
           class = "text-muted",
@@ -78,12 +62,11 @@ panel_build_db <- function() {
         br(),
         br(),
         
-        actionButton("make_run", "Build database", class = "btn-primary"),
+        actionButton("make_run", "Build database"),
         
         br(),
         br(),
         
-        tags$label("Build log"),
         verbatimTextOutput("make_log", placeholder = TRUE)
       )
     )
