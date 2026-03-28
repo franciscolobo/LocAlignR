@@ -141,7 +141,33 @@ server <- function(input, output, session) {
       updateTextInput(session, "make_outdir", value = path)
     }
   })
-  
+  # ---- Keep DB builder backend compatible with molecule type ----
+  observeEvent(input$make_type, {
+    req(input$make_type)
+    
+    if (identical(input$make_type, "nucl")) {
+      updateSelectInput(
+        session,
+        "make_backend",
+        choices = c("BLAST" = "blast"),
+        selected = "blast"
+      )
+    } else {
+      selected <- input$make_backend
+      valid_choices <- c("BLAST" = "blast", "DIAMOND" = "diamond")
+      
+      if (is.null(selected) || !(selected %in% unname(valid_choices))) {
+        selected <- "blast"
+      }
+      
+      updateSelectInput(
+        session,
+        "make_backend",
+        choices = valid_choices,
+        selected = selected
+      )
+    }
+  }, ignoreInit = FALSE)
   # ---- Run alignment (BLAST or DIAMOND) ----
   blastresults <- eventReactive(input$blast, {
     aligner <- toupper(input$aligner %||% "BLAST")

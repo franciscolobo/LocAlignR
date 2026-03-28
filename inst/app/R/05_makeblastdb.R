@@ -1,74 +1,101 @@
-# R/05_makeblastdb.R
+# inst/app/R/05_makeblastdb.R
 
-run_makeblastdb_and_register <- function(input,
-                                        cfg,
-                                        db_registry,
-                                        allowed_db_fun,
-                                        session,
-                                        append_log) {
-  shiny::validate(shiny::need(nzchar(Sys.which("makeblastdb")), "makeblastdb not found on PATH"))
-  shiny::validate(shiny::need(is.list(input$make_fasta) && file.exists(input$make_fasta$datapath), "Choose a FASTA file"))
-  shiny::validate(shiny::need(nzchar(input$make_name), "Provide a database name"))
-  shiny::validate(shiny::need(input$make_type %in% c("prot", "nucl"), "Choose a valid type"))
-
-  outdir <- if (nzchar(input$make_outdir)) input$make_outdir else getwd()
-  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
-
-  outbase <- normalizePath(file.path(outdir, input$make_name), winslash = "/", mustWork = FALSE)
-
-  args <- c(
-    "-in", normalizePath(input$make_fasta$datapath, winslash = "/"),
-    "-dbtype", input$make_type,
-    "-out", outbase
-  )
-
-  if (isTRUE(input$make_parse)) args <- c(args, "-parse_seqids")
-  if (nzchar(input$make_title)) args <- c(args, "-title", input$make_title)
-
-  append_log("[makeblastdb] cmd: makeblastdb %s", paste(shQuote(args), collapse = " "))
-
-  # Conda-first tool discovery: prefer PATH, allow override via LOCALIGN_MAKEBLASTDB
-  makeblastdb_path <- LocAlignR::localignr_find_tool("makeblastdb", env_var = "LOCALIGN_MAKEBLASTDB")
-
-  validate(
-    need(
-      nzchar(makeblastdb_path),
-      "makeblastdb not found. Activate the conda environment (preferred) or set LOCALIGN_MAKEBLASTDB."
+run_makeblastdb_and_register <- function(
+    input,
+    cfg,
+    db_registry,
+    allowed_db_fun,
+    session,
+    append_log
+) {
+  req(nzchar(input$make_name), nzchar(input$make_fasta))
+  
+  name <- trimws(input$make_name)
+  fasta <- normalizePath(input$make_fasta, mustWork = TRUE)
+  
+  type <- match.arg(input$make_type, c("nucl", "prot"))
+  backend <- tolower(input$make_backend %||% "blast")
+  
+  shiny::validate(
+    shiny::need(
+      !(identical(backend, "diamond") && !identical(type, "prot")),
+      "DIAMOND supports only protein databases."
     )
   )
-
-  res <- processx::run(makeblastdb_path, args, error_on_status = FALSE, timeout = 1800, echo = FALSE)
-
-  append_log("[makeblastdb] exit status: %d", res$status)
-  if (nzchar(res$stdout)) append_log(res$stdout)
-  if (nzchar(res$stderr)) append_log(res$stderr)
-
-  shiny::validate(shiny::need(res$status == 0, "makeblastdb failed"))
-
-  # Update in-memory registry
+  
+  outdir <- normalizePath(input$make_outdir %||% ".", mustWork = FALSE)
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  
+  if (backend == "diamond") {
+    append_log("Running DIAMOND makedb...")
+    
+    diamond_path <- LocAlignR::localignr_find_tool("diamond", env_var = "LOCALIGN_DIAMOND")
+    
+    shiny::validate(
+      shiny::need(nzchar(diamond_path), "diamond not found in PATH or LOCALIGN_DIAMOND.")
+    )
+    
+    db_path <- file.path(outdir, name)
+    
+    args <- c(
+      "makedb",
+      "--in", fasta,
+      "--db", db_path
+    )
+    
+    res <- processx::run(diamond_path, args, error_on_status = FALSE)
+    
+    shiny::validate(
+      shiny::need(res$status == 0, paste("diamond makedb failed:", res$stderr))
+    )
+    
+    db_file <- paste0(db_path, ".dmnd")
+    
+  } else {
+    append_log("Running makeblastdb...")
+    
+    makeblastdb_path <- LocAlignR::localignr_find_tool("makeblastdb", env_var = "LOCALIGN_MAKEBLASTDB")
+    
+    shiny::validate(
+      shiny::need(nzchar(makeblastdb_path), "makeblastdb not found.")
+    )
+    
+    db_path <- file.path(outdir, name)
+    
+    args <- c(
+      "-in", fasta,
+      "-dbtype", type,
+      "-out", db_path
+    )
+    
+    res <- processx::run(makeblastdb_path, args, error_on_status = FALSE)
+    
+    shiny::validate(
+      shiny::need(res$status == 0, paste("makeblastdb failed:", res$stderr))
+    )
+    
+    db_file <- db_path
+  }
+  
+  append_log("Registering database...")
+  
   reg <- db_registry()
+  
   new_row <- data.frame(
-    name = input$make_name,
-    path = outbase,
-    type = input$make_type,
+    name = name,
+    path = db_file,
+    type = type,
+    backend = backend,
     stringsAsFactors = FALSE
   )
-  reg <- rbind(reg[reg$name != input$make_name, ], new_row)
+  
+  reg <- reg[reg$name != name, , drop = FALSE]
+  reg <- rbind(reg, new_row)
+  
+  save_user_dbs(reg)
   db_registry(reg)
-
-  # Persist only user DBs (exclude seed names from config)
-  seed_names <- names(cfg$databases)
-  user_save <- reg[!(reg$name %in% seed_names), , drop = FALSE]
-  save_user_dbs(user_save)
-
-  # Refresh selector
-  choices <- unique(allowed_db_fun(input$program))
-  if (!(input$make_name %in% choices)) choices <- c(input$make_name, choices)
-  updateSelectInput(session, "db", choices = choices, selected = input$make_name)
-
-  append_log(
-    "[makeblastdb] Registered and saved DB '%s' at %s (type=%s)",
-    input$make_name, outbase, input$make_type
-  )
-  append_log("[makeblastdb] Registry file: %s", user_db_file)
+  
+  append_log(sprintf("Database '%s' registered (%s)", name, backend))
+  
+  updateSelectInput(session, "db", choices = reg$name, selected = name)
 }
