@@ -29,7 +29,6 @@ source("R/90_diagnostics.R", local = TRUE)
 server <- function(input, output, session) {
   session$onSessionEnded(function() stopApp())
   
-  # ------- Helper to get paths -------
   app_path <- function(...) {
     file.path(getwd(), ...)
   }
@@ -66,18 +65,10 @@ server <- function(input, output, session) {
   
   db_registry <- reactiveVal(reg0)
   
-  # Allowed choices per program (aligner-aware, backward compatible)
   allowed_db_choices <- function(program, aligner = NULL) {
     reg <- db_registry()
-    aligner <- toupper((aligner %||% "BLAST"))
-    
-    if (identical(aligner, "DIAMOND")) {
-      # DIAMOND: only local .dmnd databases (by registry path)
-      return(reg$name[grepl("\\.dmnd$", reg$path, ignore.case = TRUE)])
-    }
-    
-    # BLAST: existing behavior
-    allowed_db_choices_for_program(reg, program)
+    aligner <- toupper(aligner %||% "BLAST")
+    allowed_db_choices_for_program(reg, program, aligner)
   }
   
   # Keep program choices synchronized with selected aligner
@@ -93,23 +84,30 @@ server <- function(input, output, session) {
     updateSelectInput(session, "program", choices = choices, selected = selected)
   }, ignoreInit = FALSE)
   
-  # Dynamic DB choices
+  # Keep database choices synchronized with selected program + aligner
   observeEvent(list(input$program, input$aligner), {
+    req(input$program)
+    
     aligner <- toupper(input$aligner %||% "BLAST")
     choices <- unique(allowed_db_choices(input$program, aligner))
     
     if (!length(choices)) {
       if (identical(aligner, "DIAMOND")) {
-        # No DIAMOND DBs registered: show empty to force registration/selection
+        # No DIAMOND databases registered yet
         updateSelectInput(session, "db", choices = character(0), selected = character(0))
         return(invisible(NULL))
       }
+      
+      # BLAST fallback for remote databases
       choices <- if (input$program %in% c("blastn", "tblastn")) "nt" else "nr"
     }
     
-    sel <- input$db
-    if (is.null(sel) || !(sel %in% choices)) sel <- choices[1]
-    updateSelectInput(session, "db", choices = choices, selected = sel)
+    selected <- input$db
+    if (is.null(selected) || !(selected %in% choices)) {
+      selected <- choices[1]
+    }
+    
+    updateSelectInput(session, "db", choices = choices, selected = selected)
   }, ignoreInit = FALSE)
   
   # Cache for alignment XML
@@ -118,7 +116,6 @@ server <- function(input, output, session) {
   # Current XML (from a fresh run or a loaded file)
   xml_current <- reactiveVal(NULL)
   
-  # Use uploaded FASTA?
   use_upload <- reactive({
     is.list(input$fasta) &&
       !is.null(input$fasta$datapath) &&
@@ -156,31 +153,18 @@ server <- function(input, output, session) {
     
     prog <- match.arg(input$program, aligner_program_choices(aligner))
     
-    # Resolve DB selection
-    if (identical(aligner, "DIAMOND")) {
-      reg <- db_registry()
-      row <- reg[match(input$db, reg$name), , drop = FALSE]
-      
-      shiny::validate(
-        shiny::need(nrow(row) == 1 && nzchar(row$path), paste("Unknown DB:", input$db)),
-        shiny::need(grepl("\\.dmnd$", row$path, ignore.case = TRUE), "DIAMOND requires a .dmnd database.")
-      )
-      
-      db_res <- list(db_path = row$path, remote = FALSE)
-    } else {
-      db_res <- resolve_db_selection(
-        db_input = input$db,
-        registry = db_registry(),
-        program  = prog
-      )
-    }
+    db_res <- resolve_db_selection(
+      db_input = input$db,
+      registry = db_registry(),
+      program  = prog,
+      aligner  = aligner
+    )
     
-    # Cache key depends on aligner too
     file_sig <- make_query_signature(input, use_upload = use_upload())
     key <- digest::digest(list(aligner, prog, input$db, input$eval, file_sig))
     
-    if (exists(key, envir = .cache)) {
-      xml <- get(key, envir = .cache)
+    if (exists(key, envir = .cache, inherits = FALSE)) {
+      xml <- get(key, envir = .cache, inherits = FALSE)
       xml_current(xml)
       return(xml)
     }
