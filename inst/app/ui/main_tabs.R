@@ -7,9 +7,9 @@ main_tabs <- function() {
     id = "main_tabs",
 
     tabPanel(
-      "BLAST results",
+      "Alignment results",
       h4("Results"),
-      DTOutput("blastResults"),
+      DTOutput("alignmentResults"),
       hr(),
       p("Alignment:", tableOutput("clicked")),
       verbatimTextOutput("alignment")

@@ -11,7 +11,7 @@ panel_load_xml <- function() {
           `data-toggle` = "collapse",
           `data-parent` = "#taskAccordion",
           href = "#collapseLoad",
-          "Load saved BLAST XML"
+          "Load saved alignment XML"
         )
       )
     ),
@@ -20,10 +20,10 @@ panel_load_xml <- function() {
       class = "panel-collapse collapse",
       div(
         class = "panel-body",
-        fileInput("blast_xml", "Load BLAST XML", accept = c(".xml")),
+        fileInput("blast_xml", "Load alignment XML", accept = c(".xml")),
         tags$small(
           class = "text-muted",
-          "Loaded results will appear in the Run BLAST results tab."
+          "Loaded results will appear in the Run Alignment results tab."
         )
       )
     )

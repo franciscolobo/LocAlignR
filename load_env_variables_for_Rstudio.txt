@@ -1,0 +1,23 @@
+# activate conda environment
+conda activate localignr
+
+# open Rstudio
+open -a RStudio
+
+# export variables so LocAlignR can find them
+Sys.setenv(
+  LOCALIGN_BLASTP = system("which blastp", intern = TRUE),
+  LOCALIGN_BLASTN = system("which blastn", intern = TRUE),
+  LOCALIGN_BLASTX = system("which blastx", intern = TRUE),
+  LOCALIGN_TBLASTN = system("which tblastn", intern = TRUE),
+  LOCALIGN_MAKEBLASTDB = system("which makeblastdb", intern = TRUE),
+  LOCALIGN_DIAMOND = system("which diamond", intern = TRUE)
+)
+
+# check if it worked
+Sys.getenv("LOCALIGN_BLASTP")
+Sys.getenv("LOCALIGN_DIAMOND")
+
+# launch app
+shiny::runApp()
+

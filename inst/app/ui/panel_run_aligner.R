@@ -45,8 +45,10 @@ panel_run_blast <- function() {
         selectInput("eval", "e-value:", choices = c(1, 0.001, 1e-4, 1e-5, 1e-10)),
 
         fluidRow(
-          column(6, uiOutput("run_action_button")),
-          column(6, downloadButton("download_report", "Download HTML report", class = "btn-primary"))
+          column(6, uiOutput("run_action_button"))
+        ),
+        fluidRow(
+          column(6, downloadButton("download_report", "Download HTML report"))
         ),
         fluidRow(
           column(12, downloadButton("download_xml", "Download XML"))

@@ -119,7 +119,7 @@ For advanced users, external tool paths can be controlled via environment variab
 
 - LOCALIGN_MAKEBLASTDB
 
-LOCALIGN_DIAMOND
+- LOCALIGN_DIAMOND
 
 The Diagnostics tab reports which tools are detected and which paths are in use.
 
