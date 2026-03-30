@@ -1,7 +1,7 @@
 Package: LocAlignR
 Type: Package
 Title: Local Sequence Alignment via Shiny
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: c(
     person("Francisco", "Pereira Lobo", role = c("aut", "cre"),
            email = "franciscolobo@gmail.com")

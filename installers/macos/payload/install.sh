@@ -40,7 +40,7 @@ die() { say "ERROR: $*"; exit 1; }
 ask_yes_no() {
   local prompt="$1"
   local reply
-  reply=$(osascript -e "button returned of (display dialog \"$prompt\" buttons {\"Cancel\",\"Continue\"} default button \"Continue\")" 2>/dev/null || true)
+  reply=$(osascript -e "button returned of (display dialog \"$prompt\" buttons {\"Skip\",\"Continue\"} default button \"Continue\")" 2>/dev/null || true)
   [[ "$reply" == "Continue" ]]
 }
 
@@ -113,10 +113,11 @@ manifest_get_db_json() {
 }
 
 yaml_upsert_db() {
-  # args: name, path, type
+  # args: name, path, type, backend
   local nm="$1"
   local pth="$2"
   local tp="$3"
+  local backend="${4:-blast}"
 
   mkdir -p "$USER_CFG_DIR"
 
@@ -126,18 +127,109 @@ yaml_upsert_db() {
     nm  <- commandArgs(TRUE)[2]
     pth <- commandArgs(TRUE)[3]
     tp  <- commandArgs(TRUE)[4]
+    backend <- commandArgs(TRUE)[5]
 
     x <- list()
     if (file.exists(yml)) {
       x <- tryCatch(read_yaml(yml), error = function(e) list())
       if (is.null(x)) x <- list()
     }
-    x[[nm]] <- list(path = pth, type = tp)
+
+    x[[nm]] <- list(
+      path = pth,
+      type = tp,
+      backend = backend
+    )
 
     tmp <- paste0(yml, ".tmp")
     write_yaml(x, tmp)
     file.rename(tmp, yml)
-  ' "$USER_DB_YML" "$nm" "$pth" "$tp"
+  ' "$USER_DB_YML" "$nm" "$pth" "$tp" "$backend"
+}
+
+download_format_and_register_db() {
+  # args: db_id, display_name, db_dir
+  local db_id="$1"
+  local display_name="$2"
+  local db_dir="$3"
+
+  say ""
+  say "Processing: $display_name"
+
+  local db_json
+  db_json="$(manifest_get_db_json "$db_id")" || die "Failed to read manifest entry: $db_id"
+
+  local file_tsv
+  file_tsv="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+    d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+    f <- d$files
+    cat(paste(f$filename, f$url, f$sha256, sep = "\t"), sep = "\n")
+  ' "$db_json")"
+  [[ -n "$file_tsv" ]] || die "No files found in manifest for: $db_id"
+
+  local molecule
+  molecule="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+    d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+    cat(d$molecule)
+  ' "$db_json")"
+  [[ -n "$molecule" ]] || die "Missing molecule type in manifest for: $db_id"
+
+  local db_subdir="${db_dir%/}/${db_id}"
+  mkdir -p "$db_subdir"
+
+  while IFS=$'\t' read -r fn url sha; do
+    [[ -n "$fn" && -n "$url" && -n "$sha" ]] || die "Malformed file entry for $db_id"
+    local out="${db_subdir}/${fn}"
+    say "  Fetching: $fn"
+    dl_file "$url" "$out"
+    verify_sha256 "$out" "$sha"
+  done <<< "$file_tsv"
+
+  local gzip_file
+  gzip_file="$(printf '%s\n' "$file_tsv" | head -n1 | cut -f1)"
+  local in_gz="${db_subdir}/${gzip_file}"
+  [[ -f "$in_gz" ]] || die "Expected file missing: $in_gz"
+
+  local fasta_out="${in_gz%.gz}"
+  say "  Extracting: $(basename "$in_gz") -> $(basename "$fasta_out")"
+  gunzip -c "$in_gz" > "$fasta_out"
+  [[ -f "$fasta_out" ]] || die "Failed to create FASTA: $fasta_out"
+  say "  Saved FASTA: $fasta_out"
+
+  local db_base="${db_subdir%/}/${db_id}"
+
+  say "  Building BLAST database"
+  if [[ "$molecule" == "protein" ]]; then
+    "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb \
+      -in "$fasta_out" \
+      -dbtype prot \
+      -out "$db_base" \
+      -parse_seqids \
+      || die "makeblastdb failed for $db_id"
+
+    yaml_upsert_db "${db_id}_blast" "$db_base" "prot" "blast"
+  else
+    "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb \
+      -in "$fasta_out" \
+      -dbtype nucl \
+      -out "$db_base" \
+      -parse_seqids \
+      || die "makeblastdb failed for $db_id"
+
+    yaml_upsert_db "${db_id}_blast" "$db_base" "nucl" "blast"
+  fi
+  say "  Registered BLAST DB: ${db_id}_blast"
+
+  if [[ "$molecule" == "protein" ]]; then
+    say "  Building DIAMOND database"
+    "$CONDA_BIN" run -n "$ENV_NAME" diamond makedb \
+      --in "$fasta_out" \
+      --db "$db_base" \
+      || die "diamond makedb failed for $db_id"
+
+    yaml_upsert_db "${db_id}_diamond" "${db_base}.dmnd" "prot" "diamond"
+    say "  Registered DIAMOND DB: ${db_id}_diamond"
+  fi
 }
 
 create_gui_launcher() {
@@ -247,8 +339,7 @@ require_continue "This installer will set up LocAlignR on your Mac.
 Steps:
 1) Install micromamba/conda if needed
 2) Create a conda environment and install LocAlignR
-3) Optionally download curated databases
-4) Optionally format and register databases
+3) Optionally download curated databases, then automatically format and register them
 
 Continue?"
 
@@ -325,27 +416,23 @@ Continue?"
 say "Installed ${PKG} in environment ${ENV_NAME}"
 
 # ----------------------------
-# Step 3: optionally download curated databases
+# Step 3: optionally download, format, and register curated databases
 # ----------------------------
-say "== Step 3/4: Optional curated databases =="
+say "== Step 3/3: Optional curated databases =="
 
-if ask_yes_no "Would you like to download curated databases now?"; then
+if ask_yes_no "Would you like to download curated databases now? Downloaded databases will be formatted and registered automatically."; then
   [[ -f "$MANIFEST" ]] || die "Missing db_manifest.json: $MANIFEST"
 
   DB_DIR=$(ask_folder)
   [[ -n "$DB_DIR" ]] || die "No folder selected."
   say "Databases will be downloaded to: $DB_DIR"
 
-  # Build list of display names for osascript
-# Build list of display names for osascript
-DB_TSV="$(manifest_list_tsv)"
-[[ -n "$DB_TSV" ]] || die "Manifest has no databases."
+  DB_TSV="$(manifest_list_tsv)"
+  [[ -n "$DB_TSV" ]] || die "Manifest has no databases."
 
-# Prepare AppleScript list: "name1","name2",...
-DB_NAMES_CSV="$(printf '%s\n' "$DB_TSV" | cut -f2 | sed 's/"/\\"/g' | awk '{printf "\"%s\",", $0}' | sed 's/,$//')"
+  DB_NAMES_CSV="$(printf '%s\n' "$DB_TSV" | cut -f2 | sed 's/"/\\"/g' | awk '{printf "\"%s\",", $0}' | sed 's/,$//')"
 
-# IMPORTANT: return chosen items as newline-separated text to avoid commas breaking parsing
-CHOSEN="$(osascript 2>/dev/null <<OSA || true
+  CHOSEN="$(osascript 2>/dev/null <<OSA || true
 set dbs to {${DB_NAMES_CSV}}
 set chosen to choose from list dbs with prompt "Select one or more databases to download" with multiple selections allowed
 if chosen is false then
@@ -356,120 +443,24 @@ return chosen as text
 OSA
 )"
 
-if [[ -z "$CHOSEN" ]]; then
-  say "No selection. Skipping downloads."
-else
-  # Now CHOSEN is newline-separated, so we can read it safely
-  while IFS= read -r disp; do
-    disp="$(printf "%s" "$disp" | sed 's/^"//; s/"$//')"
-    [[ -n "$disp" ]] || continue
+  if [[ -z "$CHOSEN" ]]; then
+    say "No databases were selected."
+  else
+    while IFS= read -r disp; do
+      disp="$(printf "%s" "$disp" | sed 's/^"//; s/"$//')"
+      [[ -n "$disp" ]] || continue
 
-    db_id="$(printf '%s\n' "$DB_TSV" | awk -F'\t' -v d="$disp" '$2==d{print $1; exit}')"
-    [[ -n "$db_id" ]] || die "Could not map selection to db id: $disp"
+      db_id="$(printf '%s\n' "$DB_TSV" | awk -F'\t' -v d="$disp" '$2==d{print $1; exit}')"
+      [[ -n "$db_id" ]] || die "Could not map selection to db id: $disp"
 
-    say ""
-    say "Downloading: $disp"
-    db_json="$(manifest_get_db_json "$db_id")" || die "Failed to read db entry: $db_id"
-
-    file_tsv="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
-      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
-      f <- d$files
-      cat(paste(f$filename, f$url, f$sha256, sep="\t"), sep="\n")
-    ' "$db_json")"
-    [[ -n "$file_tsv" ]] || die "No files found in manifest for: $db_id"
-
-    db_subdir="${DB_DIR%/}/${db_id}"
-    mkdir -p "$db_subdir"
-
-    while IFS=$'\t' read -r fn url sha; do
-      [[ -n "$fn" && -n "$url" && -n "$sha" ]] || die "Malformed file entry for $db_id"
-      out="${db_subdir}/${fn}"
-      say "  Fetching: $fn"
-      dl_file "$url" "$out"
-      verify_sha256 "$out" "$sha"
-    done <<< "$file_tsv"
-
-    gzip_file="$(printf '%s\n' "$file_tsv" | head -n1 | cut -f1)"
-    in_gz="${db_subdir}/${gzip_file}"
-    [[ -f "$in_gz" ]] || die "Expected file missing: $in_gz"
-
-    fasta_out="${in_gz%.gz}"
-    say "  Extracting: $(basename "$in_gz") -> $(basename "$fasta_out")"
-    gunzip -c "$in_gz" > "$fasta_out"
-    say "  Saved FASTA: $fasta_out"
-
-  done <<< "$CHOSEN"
-fi
-else
-  say "Skipping downloads."
-fi
-
-# ----------------------------
-# Step 4: optionally format + register databases
-# ----------------------------
-say "== Step 4/4: Optional formatting and registration =="
-
-if ask_yes_no "Would you like to format downloaded databases and register them for LocAlignR now?"; then
-  require_continue "This step can run makeblastdb and/or diamond, then update:
-${USER_DB_YML}
-
-Continue?"
-
-  DB_DIR=$(ask_folder)
-  [[ -n "$DB_DIR" ]] || die "No folder selected."
-  say "Using database folder: $DB_DIR"
-
-  for db_subdir in "$DB_DIR"/*; do
-    [[ -d "$db_subdir" ]] || continue
-    db_id="$(basename "$db_subdir")"
-
-    # Need manifest entry for this id
-    db_json="$(manifest_get_db_json "$db_id")" || { say "Skipping unknown folder (not in manifest): $db_id"; continue; }
-
-    fasta="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
-      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
-      # assume single gz; extracted fasta name is outputs[1]
-      out <- d$post_download$extract$outputs[1]
-      cat(out)
-    ' "$db_json")"
-
-    fasta_path="${db_subdir%/}/${fasta}"
-    [[ -f "$fasta_path" ]] || { say "Skipping (FASTA not found): $fasta_path"; continue; }
-
-    molecule="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e 'd<-jsonlite::fromJSON(commandArgs(TRUE)[1]); cat(d$molecule)' "$db_json")"
-    db_base="${db_subdir%/}/${db_id}"
+      download_format_and_register_db "$db_id" "$disp" "$DB_DIR"
+    done <<< "$CHOSEN"
 
     say ""
-    say "Formatting options for: $db_id"
-
-    # Offer BLAST formatting when relevant
-    if ask_yes_no "Build BLAST database for $db_id?"; then
-      if [[ "$molecule" == "protein" ]]; then
-        "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb -in "$fasta_path" -dbtype prot -out "$db_base" -parse_seqids \
-          || die "makeblastdb failed for $db_id"
-        yaml_upsert_db "${db_id}_blast" "$db_base" "prot"
-      else
-        "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb -in "$fasta_path" -dbtype nucl -out "$db_base" -parse_seqids \
-          || die "makeblastdb failed for $db_id"
-        yaml_upsert_db "${db_id}_blast" "$db_base" "nucl"
-      fi
-      say "Registered BLAST DB: ${db_id}_blast"
-    fi
-
-    # Offer DIAMOND formatting only for protein
-    if [[ "$molecule" == "protein" ]]; then
-      if ask_yes_no "Build DIAMOND database for $db_id?"; then
-        "$CONDA_BIN" run -n "$ENV_NAME" diamond makedb --in "$fasta_path" --db "$db_base" \
-          || die "diamond makedb failed for $db_id"
-        yaml_upsert_db "${db_id}_diamond" "$db_base" "prot"
-        say "Registered DIAMOND DB: ${db_id}_diamond"
-      fi
-    fi
-  done
-
-  say "Formatting/registration complete."
+    say "Download, formatting, and registration complete."
+  fi
 else
-  say "Skipping formatting/registration."
+  say "Curated database setup was skipped."
 fi
 
 # ----------------------------
