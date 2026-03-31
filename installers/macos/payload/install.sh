@@ -2,10 +2,10 @@
 set -euo pipefail
 
 # ----------------------------
-# LocAlign macOS installer
+# LocAlignR macOS installer
 # ----------------------------
 
-APP_NAME="LocAlign"
+APP_NAME="LocAlignR"
 USER_CFG_DIR="$HOME/Library/Application Support/${APP_NAME}/config"
 USER_DB_YML="${USER_CFG_DIR}/user_dbs.yml"
 
@@ -32,6 +32,8 @@ MINIFORGE_SHA256_X86_64="6c09a3550bb65bdb6d3db6f6c2b890b987b57189f3b71c67a5af499
 # Manifest path
 MANIFEST="$(cd "$(dirname "$0")" && pwd)/db_manifest.json"
 
+# Version
+APP_VERSION="0.2.0"
 
 # Helpers
 say() { print -r -- "$@"; }
@@ -241,9 +243,19 @@ create_gui_launcher() {
 
   mkdir -p "$macos" || die "Failed to create ~/Applications."
 
-  # If you want the app to be hidden (no Dock icon), set LSUIElement to true below.
-  # Most users expect a Dock icon, so default is false (remove LSUIElement).
-  cat > "$contents/Info.plist" <<'PLIST'
+  local app_version="${APP_VERSION:-0.2.0}"
+
+  # Capture the exact executable used during installation.
+  # If CONDA_BIN is just a command name, resolve it to an absolute path now.
+  local install_bin="$CONDA_BIN"
+  if [[ "$install_bin" != */* ]]; then
+    install_bin="$(command -v "$install_bin" || true)"
+  fi
+  [[ -n "$install_bin" && -x "$install_bin" ]] || die "Could not resolve installer conda/mamba executable."
+
+  install_bin="$(cd "$(dirname "$install_bin")" && pwd)/$(basename "$install_bin")"
+
+  cat > "$contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -253,14 +265,13 @@ create_gui_launcher() {
     <key>CFBundleDisplayName</key>
     <string>LocAlignR</string>
 
-    <!-- Use a stable reverse-DNS identifier you control -->
     <key>CFBundleIdentifier</key>
     <string>io.github.franciscolobo.localignr</string>
 
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>${app_version}</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>${app_version}</string>
 
     <key>CFBundlePackageType</key>
     <string>APPL</string>
@@ -269,67 +280,94 @@ create_gui_launcher() {
 
     <key>LSMinimumSystemVersion</key>
     <string>10.15</string>
-
-    <!-- Uncomment to hide from Dock/App Switcher -->
-    <!-- <key>LSUIElement</key><true/> -->
   </dict>
 </plist>
 PLIST
 
-  cat > "$macos/LocAlignR" <<'SH'
+  cat > "$macos/LocAlignR" <<SH
 #!/bin/zsh
 set -euo pipefail
 
 APP_NAME="LocAlignR"
-ENV_NAME="localignr"
+ENV_NAME="${ENV_NAME}"
+INSTALL_BIN="${install_bin}"
 
-# Prefer explicit installs, then PATH
+# Helpful local log for debugging launcher failures
+LOG_DIR="\$HOME/Library/Logs/LocAlignR"
+LOG_FILE="\$LOG_DIR/launcher.log"
+mkdir -p "\$LOG_DIR" >/dev/null 2>&1 || true
+exec >>"\$LOG_FILE" 2>&1
+
+echo "========== \$(date) =========="
+echo "Starting launcher"
+echo "HOME=\$HOME"
+echo "PATH=\$PATH"
+echo "INSTALL_BIN=\$INSTALL_BIN"
+
+# Prefer the exact executable used during installation, then common explicit locations,
+# then whatever is currently on PATH.
 CANDIDATES=(
-  "$HOME/miniforge3/bin/conda"
-  "$HOME/miniconda3/bin/conda"
-  "$HOME/mambaforge/bin/conda"
-  "$(command -v conda || true)"
-  "$(command -v mamba || true)"
-  "$(command -v micromamba || true)"
+  "\$INSTALL_BIN"
+  "\$HOME/miniforge3/bin/conda"
+  "\$HOME/miniconda3/bin/conda"
+  "\$HOME/mambaforge/bin/conda"
+  "\$HOME/miniforge3/bin/mamba"
+  "\$HOME/miniconda3/bin/mamba"
+  "\$HOME/mambaforge/bin/mamba"
+  "\$HOME/miniforge3/bin/micromamba"
+  "\$HOME/miniconda3/bin/micromamba"
+  "\$HOME/mambaforge/bin/micromamba"
 )
 
 CONDA_BIN=""
-for c in "${CANDIDATES[@]}"; do
-  if [[ -n "$c" && -x "$c" ]]; then
-    CONDA_BIN="$c"
+for c in "\${CANDIDATES[@]}"; do
+  if [[ -n "\$c" && -x "\$c" ]]; then
+    CONDA_BIN="\$c"
     break
   fi
 done
 
-if [[ -z "$CONDA_BIN" ]]; then
-  osascript -e 'display dialog "LocAlignR could not find conda/mamba/micromamba. Re-run the LocAlignR installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
+if [[ -z "\$CONDA_BIN" ]]; then
+  if command -v conda >/dev/null 2>&1; then
+    CONDA_BIN="\$(command -v conda)"
+  elif command -v mamba >/dev/null 2>&1; then
+    CONDA_BIN="\$(command -v mamba)"
+  elif command -v micromamba >/dev/null 2>&1; then
+    CONDA_BIN="\$(command -v micromamba)"
+  fi
+fi
+
+echo "Selected runtime executable: \$CONDA_BIN"
+
+if [[ -z "\$CONDA_BIN" || ! -x "\$CONDA_BIN" ]]; then
+  osascript -e 'display dialog "LocAlignR could not find conda, mamba, or micromamba. Please re-run the LocAlignR installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
   exit 1
 fi
 
-# Tool-agnostic env check: try a trivial command inside the env.
-if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e '1' >/dev/null 2>&1; then
-  osascript -e "display dialog \"LocAlignR environment '$ENV_NAME' was not found or is broken. Re-run the LocAlignR installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
+# Check that the environment exists and is runnable
+if ! "\$CONDA_BIN" run -n "\$ENV_NAME" R -q -e '1' >/dev/null 2>&1; then
+  echo "Environment check failed for \$ENV_NAME"
+  osascript -e "display dialog \"LocAlignR environment '\$ENV_NAME' was not found or is broken. Please re-run the LocAlignR installer.\" buttons {\"OK\"} default button 1 with icon stop" >/dev/null 2>&1 || true
   exit 1
 fi
 
-# Sanity check: LocAlignR installed?
-if ! "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'packageVersion("LocAlignR")' >/dev/null 2>&1; then
-  osascript -e 'display dialog "LocAlignR is not installed in the conda environment (localignr). Re-run the LocAlignR installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
+# Check that the package is installed
+if ! "\$CONDA_BIN" run -n "\$ENV_NAME" R -q -e 'packageVersion("LocAlignR")' >/dev/null 2>&1; then
+  echo "Package check failed for LocAlignR"
+  osascript -e 'display dialog "LocAlignR is not installed in the localignr environment. Please re-run the LocAlignR installer." buttons {"OK"} default button 1 with icon stop' >/dev/null 2>&1 || true
   exit 1
 fi
 
-# Tell the user what will happen (helps with the "nothing happened" feeling)
 osascript -e 'display dialog "Starting LocAlignR.\n\nA browser window will open in a few seconds.\n\nTo stop LocAlignR, quit this app." buttons {"OK"} default button 1' >/dev/null 2>&1 || true
 
-# Launch the Shiny app
-exec "$CONDA_BIN" run -n "$ENV_NAME" R -q -e 'LocAlignR::run_app()'
+echo "Launching LocAlignR"
+exec "\$CONDA_BIN" run -n "\$ENV_NAME" R -q -e 'LocAlignR::run_app()'
 SH
 
   chmod +x "$macos/LocAlignR" || die "Failed to make launcher executable."
   touch "$app"
   say "Created GUI launcher: $app"
 }
-
 
 # ----------------------------
 # Step 0: intro
