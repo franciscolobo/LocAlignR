@@ -1,9 +1,10 @@
 # inst/app/R/06_diamond_xml.R
 
-run_diamond_as_xml <- function(mode, query, db, eval, max_target_seqs = 10L, timeout = 600) {
+run_diamond_as_xml <- function(mode, query, db, eval, params = list()) {
   mode <- match.arg(mode, c("blastp", "blastx"))
 
   diamond_path <- LocAlignR::localignr_find_tool("diamond", env_var = "LOCALIGN_DIAMOND")
+
   shiny::validate(
     shiny::need(
       nzchar(diamond_path),
@@ -11,7 +12,10 @@ run_diamond_as_xml <- function(mode, query, db, eval, max_target_seqs = 10L, tim
     )
   )
 
-  threads <- as.integer(max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
+  max_target_seqs <- as.integer(params$max_target_seqs %||% 10L)
+  threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
+  timeout <- as.integer(params$timeout_sec %||% 600L)
+
   out_xml <- tempfile(pattern = "diamond_", fileext = ".xml")
 
   args <- c(
@@ -19,13 +23,19 @@ run_diamond_as_xml <- function(mode, query, db, eval, max_target_seqs = 10L, tim
     "--query", query,
     "--db", db,
     "--evalue", as.character(eval),
-    "--max-target-seqs", as.character(as.integer(max_target_seqs)),
+    "--max-target-seqs", as.character(max_target_seqs),
     "--threads", as.character(threads),
     "--out", out_xml,
     "--outfmt", "5"
   )
 
-  res <- processx::run(diamond_path, args, error_on_status = FALSE, timeout = timeout, echo = FALSE)
+  res <- processx::run(
+    diamond_path,
+    args,
+    error_on_status = FALSE,
+    timeout = timeout,
+    echo = FALSE
+  )
 
   shiny::validate(
     shiny::need(res$status == 0, paste("DIAMOND failed:", res$stderr)),
@@ -34,4 +44,3 @@ run_diamond_as_xml <- function(mode, query, db, eval, max_target_seqs = 10L, tim
 
   XML::xmlParse(out_xml, useInternalNodes = TRUE)
 }
-

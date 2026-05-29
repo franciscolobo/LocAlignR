@@ -24,6 +24,7 @@ source("R/04_blast_xml.R")
 source("R/05_makeblastdb.R")
 source("R/06_diamond_xml.R")
 source("R/07_aligner_dispatch.R")
+source("R/08_aligner_params.R")
 source("R/90_diagnostics.R", local = TRUE)
 
 server <- function(input, output, session) {
@@ -45,7 +46,16 @@ server <- function(input, output, session) {
     lbl <- if (identical(aligner, "DIAMOND")) "run DIAMOND" else "run BLAST"
     actionButton("blast", lbl)
   })
-  
+ 
+  output$aligner_param_controls <- renderUI({
+    aligner <- toupper(input$aligner %||% "BLAST")
+    program <- input$program %||% NULL
+    render_aligner_parameter_inputs(
+      aligner = aligner,
+      program = program
+    )
+  })
+ 
   # ---------- Metadata load ----------
   subject_meta <- load_subject_meta(
     tsv_path = "metadata/subject_meta.tsv",
@@ -189,6 +199,14 @@ server <- function(input, output, session) {
     
     prog <- match.arg(input$program, aligner_program_choices(aligner))
     message(sprintf("[RUN] aligner=%s program=%s db=%s", aligner, prog, input$db)) 
+    
+    params <- collect_aligner_params(
+      input = input,
+      aligner = aligner,
+      program = prog
+    )
+
+
     db_res <- resolve_db_selection(
       db_input = input$db,
       registry = db_registry(),
@@ -197,7 +215,7 @@ server <- function(input, output, session) {
     )
     
     file_sig <- make_query_signature(input, use_upload = use_upload())
-    key <- digest::digest(list(aligner, prog, input$db, input$eval, file_sig))
+    key <- digest::digest(list(aligner, prog, input$db, input$eval, file_sig, params))
     
     if (exists(key, envir = .cache, inherits = FALSE)) {
       xml <- get(key, envir = .cache, inherits = FALSE)
@@ -214,7 +232,8 @@ server <- function(input, output, session) {
       query_fasta = tmp_fa$path,
       db          = db_res$db_path,
       evalue      = input$eval,
-      remote      = db_res$remote
+      remote      = db_res$remote,
+      params      = params
     )
     
     assign(key, xml, envir = .cache)

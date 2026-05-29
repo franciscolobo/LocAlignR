@@ -2,7 +2,7 @@
 
 aligner_program_choices <- function(aligner = "BLAST") {
   aligner <- toupper(aligner %||% "BLAST")
-  
+
   switch(
     aligner,
     "BLAST"   = c("blastp", "blastx", "blastn", "tblastn", "tblastx"),
@@ -11,21 +11,30 @@ aligner_program_choices <- function(aligner = "BLAST") {
   )
 }
 
-run_aligner_as_xml <- function(aligner, program, query_fasta, db, evalue, remote = FALSE) {
+run_aligner_as_xml <- function(
+  aligner,
+  program,
+  query_fasta,
+  db,
+  evalue,
+  remote = FALSE,
+  params = list()
+) {
   aligner <- toupper(aligner %||% "BLAST")
-  
+
   if (identical(aligner, "DIAMOND")) {
     shiny::validate(
       shiny::need(program %in% c("blastp", "blastx"), "DIAMOND supports only blastp and blastx."),
       shiny::need(!isTRUE(remote), "DIAMOND does not support remote databases."),
       shiny::need(grepl("\\.dmnd$", db, ignore.case = TRUE), "DIAMOND requires a .dmnd database.")
     )
-    
+
     run_diamond_as_xml(
-      mode  = program,
-      query = query_fasta,
-      db    = db,
-      eval  = evalue
+      mode   = program,
+      query  = query_fasta,
+      db     = db,
+      eval   = evalue,
+      params = params
     )
   } else {
     run_blast_as_xml(
@@ -33,7 +42,8 @@ run_aligner_as_xml <- function(aligner, program, query_fasta, db, evalue, remote
       query  = query_fasta,
       db     = db,
       eval   = evalue,
-      remote = remote
+      remote = remote,
+      params = params
     )
   }
 }
