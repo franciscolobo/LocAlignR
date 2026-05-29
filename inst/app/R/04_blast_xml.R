@@ -54,7 +54,14 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
   max_hsps <- as.integer(params$max_hsps %||% 1L)
   threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
   timeout <- as.integer(params$timeout_sec %||% 1800L)
+  
+  max_hsps <- as.integer(params$max_hsps %||% 1L)
+  
   word_size <- params$word_size %||% NULL
+  matrix <- params$matrix %||% NULL
+  
+  gapopen <- params$gapopen %||% NULL
+  gapextend <- params$gapextend %||% NULL
 
   args <- c(
     "-query", query,
@@ -64,9 +71,33 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
     "-max_hsps", as.character(max_hsps),
     "-max_target_seqs", as.character(max_target_seqs)
   )
-
+  
   if (!is.null(word_size) && is.finite(word_size) && as.integer(word_size) > 0L) {
     args <- c(args, "-word_size", as.character(as.integer(word_size)))
+  }
+  
+  if (!is.null(matrix)) {
+    args <- c(
+      args,
+      "-matrix",
+      matrix
+    )
+  }
+  
+  if (!is.null(gapopen)) {
+    args <- c(
+      args,
+      "-gapopen",
+      as.character(as.integer(gapopen))
+    )
+  }
+  
+  if (!is.null(gapextend)) {
+    args <- c(
+      args,
+      "-gapextend",
+      as.character(as.integer(gapextend))
+    )
   }
 
   if (isTRUE(remote)) {
