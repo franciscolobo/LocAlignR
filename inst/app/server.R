@@ -37,13 +37,12 @@ server <- function(input, output, session) {
   wire_diagnostics(output)
   
   output$run_panel_title <- renderUI({
-    aligner <- toupper(input$aligner %||% "BLAST")
-    if (identical(aligner, "DIAMOND")) "Run DIAMOND" else "Run BLAST"
+    "Run alignment"
   })
   
   output$run_action_button <- renderUI({
     aligner <- toupper(input$aligner %||% "BLAST")
-    lbl <- if (identical(aligner, "DIAMOND")) "run DIAMOND" else "run BLAST"
+    lbl <- if (identical(aligner, "DIAMOND")) "Run DIAMOND" else "Run BLAST"
     actionButton("blast", lbl)
   })
  
@@ -335,7 +334,7 @@ server <- function(input, output, session) {
     invisible(blastresults())
   })
   
-  # ---- Load BLAST XML from file ----
+  # ---- Load alignment XML from file ----
   observeEvent(input$blast_xml, {
     req(is.list(input$blast_xml), nzchar(input$blast_xml$datapath), file.exists(input$blast_xml$datapath))
     xml <- XML::xmlParse(input$blast_xml$datapath, useInternalNodes = TRUE)
@@ -402,7 +401,7 @@ server <- function(input, output, session) {
     }
   )
   
-  # ---- Download raw BLAST XML ----
+  # ---- Download raw alignment XML ----
   output$download_xml <- downloadHandler(
     filename = function() paste0("align_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xml"),
     content = function(file) {
@@ -412,7 +411,7 @@ server <- function(input, output, session) {
     }
   )
   
-  # ---- Build local BLAST DB ----
+  # ---- Build local sequence DB ----
   make_log <- reactiveVal("")
   append_make_log <- function(...) {
     msg <- sprintf(...)

@@ -23,7 +23,7 @@ panel_load_xml <- function() {
         fileInput("blast_xml", "Load alignment XML", accept = c(".xml")),
         tags$small(
           class = "text-muted",
-          "Loaded results will appear in the Run Alignment results tab."
+          "Loaded results will appear in the results tab."
         )
       )
     )
