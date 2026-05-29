@@ -55,9 +55,8 @@ run_blast_as_xml <- function(prog, query, db, eval, remote) {
     "-db", db,
     "-evalue", as.character(eval),
     "-outfmt", "5",
-    "-max_hsps", "1",
-    "-max_target_seqs", "10"
-  )
+    "-word_size", "7"
+    )
   
   if (isTRUE(remote)) {
     args <- c(args, "-remote")

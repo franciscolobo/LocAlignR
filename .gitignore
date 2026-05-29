@@ -6,9 +6,15 @@ installers/**/*.zip
 #paper
 *.docx
 
+# build recipe
+build_recipe.sh
+
 # Build automation
 .env
 *.tar.bz2
 conda-bld/
 .DS_Store
 ._*
+
+# Databases
+databases/

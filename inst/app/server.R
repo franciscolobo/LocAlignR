@@ -99,7 +99,7 @@ server <- function(input, output, session) {
       }
       
       # BLAST fallback for remote databases
-      choices <- if (input$program %in% c("blastn", "tblastn")) "nt" else "nr"
+      choices <- if (input$program %in% c("blastn", "tblastn", "tblastx")) "nt" else "nr"
     }
     
     selected <- input$db
@@ -188,7 +188,7 @@ server <- function(input, output, session) {
     validate_alignment_inputs(input, use_upload = use_upload())
     
     prog <- match.arg(input$program, aligner_program_choices(aligner))
-    
+    message(sprintf("[RUN] aligner=%s program=%s db=%s", aligner, prog, input$db)) 
     db_res <- resolve_db_selection(
       db_input = input$db,
       registry = db_registry(),

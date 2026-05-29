@@ -234,7 +234,7 @@ allowed_db_choices_for_program <- function(reg, program, aligner = "BLAST") {
     return(reg$name[reg$backend == "diamond" & reg$type == "prot"])
   }
   
-  if (program %in% c("blastn", "tblastn")) {
+  if (program %in% c("blastn", "tblastn", "tblastx")) {
     c(reg$name[reg$backend == "blast" & reg$type == "nucl"], "nt")
   } else {
     c(reg$name[reg$backend == "blast" & reg$type == "prot"], "nr")
@@ -276,7 +276,7 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
       "Selected database is not registered for BLAST."
     ),
     shiny::need(
-      !(program %in% c("blastn", "tblastn") && db_type != "nucl"),
+      !(program %in% c("blastn", "tblastn", "tblastx") && db_type != "nucl"),
       "Program needs a nucleotide DB."
     ),
     shiny::need(

@@ -5,7 +5,7 @@ aligner_program_choices <- function(aligner = "BLAST") {
   
   switch(
     aligner,
-    "BLAST"   = c("blastp", "blastx", "blastn", "tblastn"),
+    "BLAST"   = c("blastp", "blastx", "blastn", "tblastn", "tblastx"),
     "DIAMOND" = c("blastp", "blastx"),
     stop("Unsupported aligner: ", aligner)
   )

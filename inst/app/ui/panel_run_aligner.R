@@ -40,7 +40,7 @@ panel_run_blast <- function() {
         ),
 
         selectInput("aligner", "Aligner:", choices = c("BLAST", "DIAMOND"), selected = "BLAST"),
-        selectInput("program", "Program:", choices = c("blastp", "blastx", "blastn", "tblastn")),
+        selectInput("program", "Program:", choices = c("blastp", "blastx", "blastn", "tblastn", "tblastx")),
         selectInput("db", "Database:", choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")),
         selectInput("eval", "e-value:", choices = c(1, 0.001, 1e-4, 1e-5, 1e-10)),
 
