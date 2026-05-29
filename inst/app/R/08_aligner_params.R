@@ -68,23 +68,55 @@ aligner_parameter_spec <- function() {
     ),
     
     DIAMOND = list(
+      
       max_target_seqs = list(
         label = "Max target sequences",
         input = "numeric",
         default = 10L,
         min = 1L,
-        step = 1L,
-        help = "Maximum number of target sequences reported."
+        step = 1L
       ),
+      
+      sensitivity = list(
+        label = "Sensitivity",
+        input = "select",
+        default = "default",
+        choices = c(
+          "Default" = "default",
+          "Sensitive" = "sensitive",
+          "More sensitive" = "more-sensitive",
+          "Very sensitive" = "very-sensitive",
+          "Ultra sensitive" = "ultra-sensitive"
+        )
+      ),
+      
+      top = list(
+        label = "Top (%)",
+        input = "numeric_optional",
+        default = NULL
+      ),
+      
+      block_size = list(
+        label = "Block size (billions of letters)",
+        input = "numeric_decimal",
+        default = NULL
+      ),
+      
+      index_chunks = list(
+        label = "Index chunks",
+        input = "numeric_optional",
+        default = NULL
+      ),
+      
       threads = list(
         label = "Threads",
         input = "numeric",
         default = default_thread_count(),
         min = 1L,
-        step = 1L,
-        help = "Number of CPU threads to use."
+        step = 1L
       )
-    )
+    )    
+    
   )
 }
 
@@ -126,6 +158,13 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL) {
     
     widget <- switch(
       def$input,
+      
+      numeric_decimal = textInput(
+        inputId = id,
+        label = def$label,
+        value = if (is.null(def$default)) "" else as.character(def$default),
+        placeholder = def$placeholder %||% "Use program default"
+      ),
       
       numeric = numericInput(
         inputId = id,
@@ -169,6 +208,15 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL) {
 }
 
 coerce_aligner_param_value <- function(raw_value, def) {
+  
+  if (identical(def$input, "numeric_decimal")) {
+    txt <- trimws(as.character(raw_value %||% ""))
+    if (!nzchar(txt)) {
+      return(NULL)
+    }
+    return(as.numeric(txt))
+  }
+  
   if (identical(def$input, "numeric")) {
     if (is.null(raw_value) || is.na(raw_value)) {
       return(def$default)

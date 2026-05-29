@@ -15,7 +15,10 @@ run_diamond_as_xml <- function(mode, query, db, eval, params = list()) {
   max_target_seqs <- as.integer(params$max_target_seqs %||% 10L)
   threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
   timeout <- as.integer(params$timeout_sec %||% 600L)
-
+  sensitivity <- params$sensitivity %||% "default"
+  top <- params$top %||% NULL
+  block_size <- params$block_size %||% NULL
+  index_chunks <- params$index_chunks %||% NULL
   out_xml <- tempfile(pattern = "diamond_", fileext = ".xml")
 
   args <- c(
@@ -28,6 +31,37 @@ run_diamond_as_xml <- function(mode, query, db, eval, params = list()) {
     "--out", out_xml,
     "--outfmt", "5"
   )
+  
+  if (!identical(sensitivity, "default")) {
+    args <- c(
+      args,
+      paste0("--", sensitivity)
+    )
+  }
+  
+  if (!is.null(top)) {
+    args <- c(
+      args,
+      "--top",
+      as.character(top)
+    )
+  }
+  
+  if (!is.null(block_size)) {
+    args <- c(
+      args,
+      "--block-size",
+      as.character(block_size)
+    )
+  }
+  
+  if (!is.null(index_chunks)) {
+    args <- c(
+      args,
+      "--index-chunks",
+      as.character(as.integer(index_chunks))
+    )
+  }
 
   res <- processx::run(
     diamond_path,
