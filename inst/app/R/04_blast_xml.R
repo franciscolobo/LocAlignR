@@ -49,45 +49,82 @@ materialize_query_fasta <- function(input, use_upload) {
   }
 }
 
-run_blast_as_xml <- function(prog, query, db, eval, remote) {
+run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
+  max_target_seqs <- as.integer(params$max_target_seqs %||% 10L)
+  max_hsps <- as.integer(params$max_hsps %||% 1L)
+  threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
+  timeout <- as.integer(params$timeout_sec %||% 1800L)
+  word_size <- params$word_size %||% NULL
+
   args <- c(
     "-query", query,
     "-db", db,
     "-evalue", as.character(eval),
     "-outfmt", "5",
-    "-word_size", "7"
-    )
-  
+    "-max_hsps", as.character(max_hsps),
+    "-max_target_seqs", as.character(max_target_seqs)
+  )
+
+  if (!is.null(word_size) && is.finite(word_size) && as.integer(word_size) > 0L) {
+    args <- c(args, "-word_size", as.character(as.integer(word_size)))
+  }
+
   if (isTRUE(remote)) {
     args <- c(args, "-remote")
   } else {
-    threads <- as.character(max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
-    args <- c(args, "-num_threads", threads)
+    args <- c(args, "-num_threads", as.character(threads))
   }
-  
-  # Conda-first tool discovery: prefer PATH, allow override via LOCALIGN_<PROG>
-  prog_path <- LocAlignR::localignr_find_tool(prog, env_var = paste0("LOCALIGN_", toupper(prog)))
-  
-  # Validate early with a clear message for cross-platform installs
-  validate(
-    need(
+
+  prog_path <- LocAlignR::localignr_find_tool(
+    prog,
+    env_var = paste0("LOCALIGN_", toupper(prog))
+  )
+
+  message(sprintf("[BLAST] program=%s", prog))
+  message(sprintf("[BLAST] executable=%s", prog_path))
+  message(sprintf("[BLAST] query=%s", query))
+  message(sprintf("[BLAST] db=%s", db))
+  message(sprintf("[BLAST] args=%s", paste(shQuote(args), collapse = " ")))
+
+  shiny::validate(
+    shiny::need(
       nzchar(prog_path),
       paste0(
         prog,
-        " not found. Activate the conda environment (preferred) or set ",
+        " not found. Activate the conda environment or set ",
         paste0("LOCALIGN_", toupper(prog)),
         "."
       )
     )
   )
-  
-  res <- processx::run(prog_path, args, error_on_status = FALSE, timeout = 600, echo = FALSE)
-  
-  shiny::validate(
-    shiny::need(res$status == 0, paste("BLAST failed:", res$stderr)),
-    shiny::need(nzchar(res$stdout), "BLAST returned no output.")
+
+  res <- processx::run(
+    prog_path,
+    args,
+    error_on_status = FALSE,
+    timeout = timeout,
+    echo = FALSE
   )
-  
+
+  message(sprintf("[BLAST] exit status=%s", res$status))
+  if (nzchar(res$stdout)) message(sprintf("[BLAST] stdout chars=%d", nchar(res$stdout)))
+  if (nzchar(res$stderr)) message(sprintf("[BLAST] stderr=%s", res$stderr))
+
+  shiny::validate(
+    shiny::need(
+      res$status == 0,
+      paste0(
+        "BLAST failed.\n\nProgram: ", prog,
+        "\nExit status: ", res$status,
+        "\n\nSTDERR:\n", res$stderr
+      )
+    ),
+    shiny::need(
+      nzchar(res$stdout),
+      paste0("BLAST returned no XML output.\n\nSTDERR:\n", res$stderr)
+    )
+  )
+
   XML::xmlParse(res$stdout, asText = TRUE, useInternalNodes = TRUE)
 }
 
