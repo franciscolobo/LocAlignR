@@ -42,8 +42,18 @@ panel_run_blast <- function() {
         selectInput("aligner", "Aligner:", choices = c("BLAST", "DIAMOND"), selected = "BLAST"),
         selectInput("program", "Program:", choices = c("blastp", "blastx", "blastn", "tblastn", "tblastx")),
         selectInput("db", "Database:", choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")),
-        selectInput("eval", "e-value:", choices = c(10, 1, 0.001, 1e-4, 1e-5, 1e-10)),
+        textInput(
+          "eval",
+          "e-value:",
+          value = "1e-5",
+          placeholder = "e.g. 1e-5, 0.001, 10"
+        ),
         uiOutput("aligner_preset_control"),
+        checkboxInput(
+          "show_advanced_params",
+          "Show advanced parameters",
+          value = FALSE
+        ),
         uiOutput("aligner_param_controls"),
 
         fluidRow(

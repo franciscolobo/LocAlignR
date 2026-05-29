@@ -76,7 +76,8 @@ aligner_parameter_spec <- function() {
         input = "numeric",
         default = 10L,
         min = 1L,
-        step = 1L
+        step = 1L,
+        level = "basic"
       ),
       
       max_hsps = list(
@@ -84,14 +85,16 @@ aligner_parameter_spec <- function() {
         input = "numeric",
         default = 1L,
         min = 1L,
-        step = 1L
+        step = 1L,
+        level = "advanced"
       ),
       
       word_size = list(
         label = "Word size",
         input = "numeric_optional",
         default = NULL,
-        programs = c("blastn", "tblastx")
+        programs = c("blastn", "tblastx"),
+        level = "advanced"
       ),
       
       matrix = list(
@@ -104,21 +107,24 @@ aligner_parameter_spec <- function() {
           "BLOSUM62",
           "BLOSUM80",
           "PAM250"
-        )
+        ),
+        level = "advanced"
       ),
       
       gapopen = list(
         label = "Gap open penalty",
         input = "numeric_optional",
         default = NULL,
-        programs = c("blastp", "blastx", "tblastn")
+        programs = c("blastp", "blastx", "tblastn"),
+        level = "advanced"
       ),
       
       gapextend = list(
         label = "Gap extension penalty",
         input = "numeric_optional",
         default = NULL,
-        programs = c("blastp", "blastx", "tblastn")
+        programs = c("blastp", "blastx", "tblastn"),
+        level = "advanced"
       ),
       
       threads = list(
@@ -150,25 +156,29 @@ aligner_parameter_spec <- function() {
           "More sensitive" = "more-sensitive",
           "Very sensitive" = "very-sensitive",
           "Ultra sensitive" = "ultra-sensitive"
-        )
+        ),
+        level = "advanced"
       ),
       
       top = list(
         label = "Top (%)",
         input = "numeric_optional",
-        default = NULL
+        default = NULL,
+        level = "advanced"
       ),
       
       block_size = list(
         label = "Block size (billions of letters)",
         input = "numeric_decimal",
-        default = NULL
+        default = NULL,
+        level = "advanced"
       ),
       
       index_chunks = list(
         label = "Index chunks",
         input = "numeric_optional",
-        default = NULL
+        default = NULL,
+        level = "advanced"
       ),
       
       threads = list(
@@ -208,8 +218,24 @@ aligner_param_input_id <- function(param_name) {
   paste0("aligner_param__", param_name)
 }
 
-render_aligner_parameter_inputs <- function(aligner, program = NULL) {
+render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanced = FALSE) {
   defs <- get_aligner_parameter_defs(aligner, program)
+  
+  if (!length(defs)) {
+    return(NULL)
+  }
+  
+  if (!isTRUE(show_advanced)) {
+    keep <- vapply(
+      defs,
+      function(def) {
+        identical(def$level %||% "basic", "basic")
+      },
+      logical(1)
+    )
+    
+    defs <- defs[keep]
+  }
   
   if (!length(defs)) {
     return(NULL)
@@ -221,13 +247,6 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL) {
     
     widget <- switch(
       def$input,
-      
-      numeric_decimal = textInput(
-        inputId = id,
-        label = def$label,
-        value = if (is.null(def$default)) "" else as.character(def$default),
-        placeholder = def$placeholder %||% "Use program default"
-      ),
       
       numeric = numericInput(
         inputId = id,
@@ -242,7 +261,14 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL) {
         inputId = id,
         label = def$label,
         value = if (is.null(def$default)) "" else as.character(def$default),
-        placeholder = "Use program default"
+        placeholder = def$placeholder %||% "Use program default"
+      ),
+      
+      numeric_decimal = textInput(
+        inputId = id,
+        label = def$label,
+        value = if (is.null(def$default)) "" else as.character(def$default),
+        placeholder = def$placeholder %||% "Use program default"
       ),
       
       select = selectInput(
@@ -265,7 +291,7 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL) {
   
   tagList(
     tags$hr(),
-    tags$h5("Advanced parameters"),
+    tags$h5(if (isTRUE(show_advanced)) "Parameters" else "Basic parameters"),
     widgets
   )
 }
@@ -298,6 +324,15 @@ coerce_aligner_param_value <- function(raw_value, def) {
   }
   
   if (identical(def$input, "select")) {
+    if (
+      is.null(raw_value) ||
+      length(raw_value) == 0 ||
+      is.na(raw_value) ||
+      !nzchar(trimws(as.character(raw_value)))
+    ) {
+      return(def$default)
+    }
+    
     return(as.character(raw_value))
   }
   

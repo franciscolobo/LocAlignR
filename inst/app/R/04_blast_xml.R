@@ -72,34 +72,22 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
     "-max_target_seqs", as.character(max_target_seqs)
   )
   
-  if (!is.null(word_size) && is.finite(word_size) && as.integer(word_size) > 0L) {
+  if (!is.null(word_size) && length(word_size) > 0 && !is.na(word_size)) {
     args <- c(args, "-word_size", as.character(as.integer(word_size)))
   }
   
-  if (!is.null(matrix)) {
-    args <- c(
-      args,
-      "-matrix",
-      matrix
-    )
+  if (!is.null(matrix) && length(matrix) > 0 && !is.na(matrix) && nzchar(trimws(as.character(matrix)))) {
+    args <- c(args, "-matrix", as.character(matrix))
   }
   
-  if (!is.null(gapopen)) {
-    args <- c(
-      args,
-      "-gapopen",
-      as.character(as.integer(gapopen))
-    )
+  if (!is.null(gapopen) && length(gapopen) > 0 && !is.na(gapopen)) {
+    args <- c(args, "-gapopen", as.character(as.integer(gapopen)))
   }
   
-  if (!is.null(gapextend)) {
-    args <- c(
-      args,
-      "-gapextend",
-      as.character(as.integer(gapextend))
-    )
+  if (!is.null(gapextend) && length(gapextend) > 0 && !is.na(gapextend)) {
+    args <- c(args, "-gapextend", as.character(as.integer(gapextend)))
   }
-
+  
   if (isTRUE(remote)) {
     args <- c(args, "-remote")
   } else {

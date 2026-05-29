@@ -50,9 +50,11 @@ server <- function(input, output, session) {
   output$aligner_param_controls <- renderUI({
     aligner <- toupper(input$aligner %||% "BLAST")
     program <- input$program %||% NULL
+    
     render_aligner_parameter_inputs(
       aligner = aligner,
-      program = program
+      program = program,
+      show_advanced = isTRUE(input$show_advanced_params)
     )
   })
   
@@ -264,6 +266,7 @@ server <- function(input, output, session) {
       )
     }
   }, ignoreInit = FALSE)
+  
   # ---- Run alignment (BLAST or DIAMOND) ----
   blastresults <- eventReactive(input$blast, {
     aligner <- toupper(input$aligner %||% "BLAST")
@@ -274,15 +277,22 @@ server <- function(input, output, session) {
     validate_alignment_inputs(input, use_upload = use_upload())
     
     prog <- match.arg(input$program, aligner_program_choices(aligner))
-    message(sprintf("[RUN] aligner=%s program=%s db=%s", aligner, prog, input$db)) 
+    
+    evalue <- suppressWarnings(as.numeric(trimws(input$eval %||% "")))
+    
+    shiny::validate(
+      shiny::need(
+        is.finite(evalue) && evalue > 0,
+        "Please provide a valid positive e-value, e.g. 1e-5, 0.001, or 1."
+      )
+    )
     
     params <- collect_aligner_params(
       input = input,
       aligner = aligner,
       program = prog
     )
-
-
+    
     db_res <- resolve_db_selection(
       db_input = input$db,
       registry = db_registry(),
@@ -290,8 +300,10 @@ server <- function(input, output, session) {
       aligner  = aligner
     )
     
+    logf("[RUN] aligner=%s program=%s db=%s evalue=%s", aligner, prog, input$db, evalue)
+    
     file_sig <- make_query_signature(input, use_upload = use_upload())
-    key <- digest::digest(list(aligner, prog, input$db, input$eval, file_sig, params))
+    key <- digest::digest(list(aligner, prog, input$db, evalue, file_sig, params))
     
     if (exists(key, envir = .cache, inherits = FALSE)) {
       xml <- get(key, envir = .cache, inherits = FALSE)
@@ -307,10 +319,12 @@ server <- function(input, output, session) {
       program     = prog,
       query_fasta = tmp_fa$path,
       db          = db_res$db_path,
-      evalue      = input$eval,
+      evalue      = evalue,
       remote      = db_res$remote,
       params      = params
     )
+    
+    logf("[RUN] XML returned for aligner=%s program=%s", aligner, prog)
     
     assign(key, xml, envir = .cache)
     xml_current(xml)
