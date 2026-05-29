@@ -55,6 +55,82 @@ server <- function(input, output, session) {
       program = program
     )
   })
+  
+  output$aligner_preset_control <- renderUI({
+    aligner <- toupper(input$aligner %||% "BLAST")
+    selectInput(
+      "aligner_preset",
+      "Preset",
+      choices = preset_choices(aligner),
+      selected = "Default"
+    )
+  })
+  
+  observeEvent(
+    list(
+      input$aligner,
+      input$aligner_preset
+    ),
+    {
+      
+      req(input$aligner_preset)
+      
+      aligner <- toupper(input$aligner)
+      
+      preset <- get_preset_values(
+        aligner,
+        input$aligner_preset
+      )
+      
+      defs <- get_aligner_parameter_defs(
+        aligner,
+        input$program
+      )
+      
+      for (nm in names(preset)) {
+        
+        if (!nm %in% names(defs)) {
+          next
+        }
+        
+        id <- aligner_param_input_id(nm)
+        
+        def <- defs[[nm]]
+        
+        if (def$input == "numeric") {
+          
+          updateNumericInput(
+            session,
+            id,
+            value = preset[[nm]]
+          )
+          
+        } else if (def$input %in%
+                   c(
+                     "numeric_optional",
+                     "numeric_decimal"
+                   )) {
+          
+          updateTextInput(
+            session,
+            id,
+            value = as.character(
+              preset[[nm]]
+            )
+          )
+          
+        } else if (def$input == "select") {
+          
+          updateSelectInput(
+            session,
+            id,
+            selected = preset[[nm]]
+          )
+        }
+      }
+    },
+    ignoreInit = TRUE
+  )
  
   # ---------- Metadata load ----------
   subject_meta <- load_subject_meta(

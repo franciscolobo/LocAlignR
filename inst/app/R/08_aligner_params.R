@@ -4,6 +4,69 @@ default_thread_count <- function() {
   as.integer(max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
 }
 
+preset_choices <- function(aligner) {
+  
+  aligner <- toupper(aligner)
+  
+  names(
+    aligner_presets()[[aligner]]
+  )
+}
+
+get_preset_values <- function(aligner, preset) {
+  
+  aligner <- toupper(aligner)
+  
+  aligner_presets()[[aligner]][[preset]]
+}
+
+aligner_presets <- function() {
+  
+  list(
+    
+    BLAST = list(
+      
+      Fast = list(
+        max_target_seqs = 10L,
+        max_hsps = 1L
+      ),
+      
+      Default = list(
+        max_target_seqs = 10L,
+        max_hsps = 1L
+      ),
+      
+      Sensitive = list(
+        max_target_seqs = 50L,
+        max_hsps = 5L
+      )
+    ),
+    
+    DIAMOND = list(
+      
+      Fast = list(
+        max_target_seqs = 10L,
+        sensitivity = "default"
+      ),
+      
+      Default = list(
+        max_target_seqs = 10L,
+        sensitivity = "sensitive"
+      ),
+      
+      Sensitive = list(
+        max_target_seqs = 50L,
+        sensitivity = "very-sensitive"
+      ),
+      
+      `Ultra-sensitive` = list(
+        max_target_seqs = 100L,
+        sensitivity = "ultra-sensitive"
+      )
+    )
+  )
+}
+
 aligner_parameter_spec <- function() {
   list(
     BLAST = list(
