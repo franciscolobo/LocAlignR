@@ -31,56 +31,100 @@ panel_run_aligner <- function() {
           "input.input_mode == 'paste'",
           textAreaInput("query", "Input sequence:", width = "100%", height = "260px")
         ),
+        
         conditionalPanel(
           "input.input_mode == 'upload'",
           fileInput(
-            "fasta", "FASTA file", multiple = FALSE,
+            "fasta",
+            "FASTA file",
+            multiple = FALSE,
             accept = c(".fa", ".fasta", ".faa", ".fas", ".fna", ".txt")
           )
         ),
         
-        selectInput("aligner", "Aligner:", choices = c("BLAST", "DIAMOND"), selected = "BLAST"),
-        selectInput("program", "Program:", choices = c("blastp", "blastx", "blastn", "tblastn", "tblastx")),
-        selectInput("db", "Database:", choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")),
+        fluidRow(
+          column(
+            width = 6,
+            selectInput(
+              "aligner",
+              "Aligner:",
+              choices = c("BLAST", "DIAMOND"),
+              selected = "BLAST"
+            )
+          ),
+          column(
+            width = 6,
+            selectInput(
+              "program",
+              "Program:",
+              choices = c("blastp", "blastx", "blastn", "tblastn", "tblastx")
+            )
+          )
+        ),
+        
+        selectInput(
+          "db",
+          "Database:",
+          choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")
+        ),
+        
         textInput(
           "eval",
           "e-value:",
           value = "1e-5",
           placeholder = "e.g. 1e-5, 0.001, 10"
         ),
+        
         uiOutput("aligner_preset_control"),
+        
         checkboxInput(
           "show_advanced_params",
           "Show advanced parameters",
           value = FALSE
         ),
+        
         uiOutput("aligner_param_controls"),
         
-        fluidRow(
-          column(6, uiOutput("run_action_button"))
-        ),
-        fluidRow(
-          column(6, downloadButton("download_report", "Download HTML report"))
-        ),
-        fluidRow(
-          column(12, downloadButton("download_xml", "Download XML"))
-        ),
+        tags$hr(),
+        
         fluidRow(
           column(
-            width = 6,
-            downloadButton("download_strategy", "Download search strategy")
+            width = 12,
+            uiOutput("run_action_button")
+          )
+        ),
+        
+        br(),
+        
+        tags$h5("Downloads"),
+        
+        fluidRow(
+          column(
+            width = 4,
+            downloadButton("download_report", "HTML report")
           ),
           column(
-            width = 6,
-            fileInput(
-              "upload_strategy",
-              "Load search strategy",
-              accept = c(".json")
-            )
+            width = 4,
+            downloadButton("download_xml", "XML")
+          ),
+          column(
+            width = 4,
+            downloadButton("download_strategy", "Search strategy")
           )
+        ),
+        
+        br(),
+        
+        tags$h5("Load strategy"),
+        
+        fileInput(
+          "upload_strategy",
+          label = NULL,
+          accept = c(".json"),
+          buttonLabel = "Browse...",
+          placeholder = "No strategy selected"
         )
       )
     )
   )
 }
-
