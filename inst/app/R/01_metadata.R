@@ -6,6 +6,16 @@ empty_subject_meta <- function(meta_path = NA_character_) {
   out
 }
 
+metadata_cache_key <- function(db_name, registry) {
+  path <- metadata_path_for_db(db_name, registry)
+  
+  if (is.na(path) || !nzchar(path)) {
+    return(paste0("NO_METADATA::", db_name))
+  }
+  
+  normalizePath(path, winslash = "/", mustWork = FALSE)
+}
+
 load_subject_meta <- function(path = NA_character_) {
   if (is.null(path) || !length(path) || is.na(path) || !nzchar(path) || !file.exists(path)) {
     logf("[META] No database-specific metadata file found")

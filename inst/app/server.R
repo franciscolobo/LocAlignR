@@ -135,9 +135,22 @@ server <- function(input, output, session) {
   )
   
   # ---------- Metadata load ----------
+  metadata_cache <- new.env(parent = emptyenv())
+  
   subject_meta <- reactive({
     req(input$db)
-    load_subject_meta_for_db(input$db, db_registry())
+    
+    cache_key <- metadata_cache_key(input$db, db_registry())
+    
+    if (exists(cache_key, envir = metadata_cache, inherits = FALSE)) {
+      logf("[META] Using cached metadata for DB: %s", input$db)
+      return(get(cache_key, envir = metadata_cache, inherits = FALSE))
+    }
+    
+    meta <- load_subject_meta_for_db(input$db, db_registry())
+    assign(cache_key, meta, envir = metadata_cache)
+    
+    meta
   })
   
   # ---------- Config + registry ----------
@@ -532,15 +545,19 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   observeEvent(input$make_run, {
-    run_makeseqdb_and_register(
-      input          = input,
-      cfg            = cfg,
-      db_registry    = db_registry,
+    run_makeblastdb_and_register(
+      input = input,
+      cfg = cfg,
+      db_registry = db_registry,
       allowed_db_fun = function(program) allowed_db_choices(program, aligner = "BLAST"),
-      session        = session,
-      append_log     = append_make_log
+      session = session,
+      append_log = append_make_log
     )
+    
+    rm(list = ls(envir = metadata_cache), envir = metadata_cache)
+    logf("[META] Metadata cache cleared after DB registration")
   })
+  
   observeEvent(input$upload_strategy, {
     req(
       is.list(input$upload_strategy),
