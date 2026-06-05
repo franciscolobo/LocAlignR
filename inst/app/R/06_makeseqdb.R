@@ -142,18 +142,20 @@ run_makeseqdb_and_register <- function(
     has_metadata <- TRUE
   }
   
-  new_row <- data.frame(
-    name = db_name,
-    path = db_path,
-    type = db_type,
-    backend = backend,
-    title = trimws(input$make_title %||% ""),
-    source = "user",
-    created = as.character(Sys.Date()),
-    version = "",
-    metadata_path = metadata_path,
-    has_metadata = has_metadata,
-    stringsAsFactors = FALSE
+  new_row <- normalize_registry_df(
+    data.frame(
+      name = db_name,
+      path = db_path,
+      type = db_type,
+      backend = backend,
+      title = trimws(input$make_title %||% db_label),
+      source = "user",
+      created = as.character(Sys.Date()),
+      version = "",
+      metadata_path = metadata_path,
+      has_metadata = has_metadata,
+      stringsAsFactors = FALSE
+    )
   )
   
   reg <- rbind(reg[reg$name != db_name, , drop = FALSE], new_row)

@@ -1,4 +1,71 @@
 # inst/app/R/02_user_db_registry.R
+registry_schema_columns <- function() {
+  c(
+    "name",
+    "path",
+    "type",
+    "backend",
+    "title",
+    "source",
+    "created",
+    "version",
+    "metadata_path",
+    "has_metadata"
+  )
+}
+
+empty_registry_df <- function() {
+  data.frame(
+    name = character(),
+    path = character(),
+    type = character(),
+    backend = character(),
+    title = character(),
+    source = character(),
+    created = character(),
+    version = character(),
+    metadata_path = character(),
+    has_metadata = logical(),
+    stringsAsFactors = FALSE
+  )
+}
+
+normalize_registry_df <- function(df) {
+  if (is.null(df) || !nrow(df)) {
+    return(empty_registry_df())
+  }
+  
+  cols <- registry_schema_columns()
+  
+  for (nm in setdiff(cols, names(df))) {
+    if (identical(nm, "has_metadata")) {
+      df[[nm]] <- FALSE
+    } else {
+      df[[nm]] <- ""
+    }
+  }
+  
+  df <- df[, cols, drop = FALSE]
+  
+  df$name <- as.character(df$name)
+  df$path <- as.character(df$path)
+  df$type <- as.character(df$type)
+  df$backend <- tolower(as.character(df$backend))
+  df$title <- as.character(df$title)
+  df$source <- as.character(df$source)
+  df$created <- as.character(df$created)
+  df$version <- as.character(df$version)
+  df$metadata_path <- as.character(df$metadata_path)
+  df$has_metadata <- as.logical(df$has_metadata)
+  
+  df$backend[!nzchar(df$backend)] <- "blast"
+  df$source[!nzchar(df$source)] <- "user"
+  df$title[!nzchar(df$title)] <- df$name[!nzchar(df$title)]
+  df$has_metadata[is.na(df$has_metadata)] <- FALSE
+  
+  rownames(df) <- NULL
+  df
+}
 
 user_db_file <- file.path(
   tools::R_user_dir("LocAlignR", which = "config"),
@@ -113,60 +180,38 @@ build_seed_registry <- function(cfg) {
   dbs <- cfg$databases
   
   if (is.null(dbs) || !length(dbs)) {
-    return(
-      data.frame(
-        name = character(),
-        path = character(),
-        type = character(),
-        backend = character(),
-        title = character(),
-        source = character(),
-        created = character(),
-        version = character(),
-        metadata_path = character(),
-        has_metadata = logical(),
-        stringsAsFactors = FALSE
-      )
-    )
+    return(empty_registry_df())
   }
   
   nms <- names(dbs)
   paths <- unname(unlist(dbs))
   
-  data.frame(
-    name = nms,
-    path = normalizePath(paths, winslash = "/", mustWork = FALSE),
-    type = mapply(infer_type, nms, paths, USE.NAMES = FALSE),
-    backend = "blast",
-    title = nms,
-    source = "seed",
-    created = "",
-    version = "",
-    metadata_path = "",
-    has_metadata = FALSE,
-    stringsAsFactors = FALSE
+  normalize_registry_df(
+    data.frame(
+      name = nms,
+      path = normalizePath(paths, winslash = "/", mustWork = FALSE),
+      type = mapply(infer_type, nms, paths, USE.NAMES = FALSE),
+      backend = "blast",
+      title = nms,
+      source = "seed",
+      created = "",
+      version = "",
+      metadata_path = "",
+      has_metadata = FALSE,
+      stringsAsFactors = FALSE
+    )
   )
 }
 
 load_user_dbs <- function(path = user_db_file) {
-  empty_df <- data.frame(
-    name = character(),
-    path = character(),
-    type = character(),
-    backend = character(),
-    title = character(),
-    source = character(),
-    created = character(),
-    version = character(),
-    metadata_path = character(),
-    has_metadata = logical(),
-    stringsAsFactors = FALSE
-  )
-  
-  if (!file.exists(path)) return(empty_df)
+  if (!file.exists(path)) {
+    return(empty_registry_df())
+  }
   
   y <- tryCatch(yaml::read_yaml(path), error = function(e) NULL)
-  if (is.null(y) || !length(y)) return(empty_df)
+  if (is.null(y) || !length(y)) {
+    return(empty_registry_df())
+  }
   
   nm <- names(y)
   
@@ -174,35 +219,43 @@ load_user_dbs <- function(path = user_db_file) {
     entry <- y[[i]]
     
     path_val <- as.character(entry$path %||% "")
-    type_val <- as.character(entry$type %||% infer_type(nm[i], path_val))
     backend_val <- as.character(entry$backend %||% "")
     
     if (!nzchar(backend_val)) {
       backend_val <- if (grepl("\\.dmnd$", path_val, ignore.case = TRUE)) "diamond" else "blast"
     }
     
+    metadata_path <- as.character(entry$metadata_path %||% "")
+    has_metadata <- as.logical(entry$has_metadata %||% FALSE)
+    
+    if (nzchar(metadata_path) && file.exists(metadata_path)) {
+      has_metadata <- TRUE
+    }
+    
     data.frame(
       name = nm[i],
       path = path_val,
-      type = type_val,
+      type = as.character(entry$type %||% infer_type(nm[i], path_val)),
       backend = tolower(backend_val),
-      title = as.character(entry$title %||% ""),
+      title = as.character(entry$title %||% nm[i]),
       source = as.character(entry$source %||% "user"),
       created = as.character(entry$created %||% ""),
       version = as.character(entry$version %||% ""),
-      metadata_path = as.character(entry$metadata_path %||% ""),
-      has_metadata = as.logical(entry$has_metadata %||% FALSE),
+      metadata_path = metadata_path,
+      has_metadata = has_metadata,
       stringsAsFactors = FALSE
     )
   })
   
-  dplyr::bind_rows(rows)
+  normalize_registry_df(dplyr::bind_rows(rows))
 }
 
 save_user_dbs <- function(df, path = user_db_file) {
   ensure_user_db_dir()
   
-  if (is.null(df) || !nrow(df)) {
+  df <- normalize_registry_df(df)
+  
+  if (!nrow(df)) {
     tmp <- paste0(path, ".tmp")
     yaml::write_yaml(list(), tmp)
     file.rename(tmp, path)
@@ -213,12 +266,17 @@ save_user_dbs <- function(df, path = user_db_file) {
     lapply(seq_len(nrow(df)), function(i) {
       row <- df[i, , drop = FALSE]
       
-      x <- as.list(row)
-      x <- lapply(x, function(v) {
-        if (length(v) == 0 || is.na(v)) NULL else as.character(v)
-      })
-      
-      x[!vapply(x, is.null, logical(1))]
+      list(
+        path = row$path,
+        type = row$type,
+        backend = row$backend,
+        title = row$title,
+        source = row$source,
+        created = row$created,
+        version = row$version,
+        metadata_path = row$metadata_path,
+        has_metadata = isTRUE(row$has_metadata)
+      )
     }),
     df$name
   )
@@ -231,32 +289,16 @@ save_user_dbs <- function(df, path = user_db_file) {
 }
 
 merge_seed_and_user_registry <- function(seed, user) {
-  if (is.null(seed)) seed <- data.frame(stringsAsFactors = FALSE)
-  if (is.null(user)) user <- data.frame(stringsAsFactors = FALSE)
-  
-  all_cols <- union(names(seed), names(user))
-  
-  add_missing_cols <- function(df, cols) {
-    missing <- setdiff(cols, names(df))
-    
-    for (nm in missing) {
-      df[[nm]] <- ""
-    }
-    
-    df[, cols, drop = FALSE]
-  }
-  
-  seed <- add_missing_cols(seed, all_cols)
-  user <- add_missing_cols(user, all_cols)
+  seed <- normalize_registry_df(seed)
+  user <- normalize_registry_df(user)
   
   if (!nrow(seed)) return(user)
   if (!nrow(user)) return(seed)
   
   merged <- seed[!(seed$name %in% user$name), , drop = FALSE]
-  merged <- rbind(merged, user)
-  rownames(merged) <- NULL
+  merged <- dplyr::bind_rows(merged, user)
   
-  merged
+  normalize_registry_df(merged)
 }
 
 allowed_db_choices_for_program <- function(reg, program, aligner = "BLAST") {
