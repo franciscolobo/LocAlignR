@@ -28,6 +28,12 @@ panel_build_db <- function() {
           accept = c(".fa", ".fasta", ".faa", ".fas", ".fna", ".txt")
         ),
         
+        fileInput(
+          "make_metadata",
+          "Optional metadata file",
+          multiple = FALSE,
+          accept = c(".tsv", ".csv", ".txt")
+        ),
         textInput("make_name", "Database name"),
         
         selectInput(

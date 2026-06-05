@@ -19,7 +19,8 @@ run_makeblastdb_and_register <- function(
   
   backend <- tolower(input$make_backend %||% "blast")
   db_type <- input$make_type
-  db_name <- trimws(input$make_name)
+  db_label <- trimws(input$make_name)
+  db_name <- make_db_registry_name(db_label, backend)
   
   shiny::validate(
     shiny::need(
@@ -122,11 +123,36 @@ run_makeblastdb_and_register <- function(
   
   reg <- db_registry()
   
+  metadata_path <- ""
+  has_metadata <- FALSE
+  
+  if (is.list(input$make_metadata) &&
+      !is.null(input$make_metadata$datapath) &&
+      nzchar(input$make_metadata$datapath) &&
+      file.exists(input$make_metadata$datapath)) {
+    
+    metadata_ext <- tools::file_ext(input$make_metadata$name)
+    metadata_path <- file.path(
+      outdir,
+      paste0(db_name, "_metadata.", metadata_ext)
+    )
+    
+    file.copy(input$make_metadata$datapath, metadata_path, overwrite = TRUE)
+    metadata_path <- normalizePath(metadata_path, winslash = "/", mustWork = FALSE)
+    has_metadata <- TRUE
+  }
+  
   new_row <- data.frame(
     name = db_name,
     path = db_path,
     type = db_type,
     backend = backend,
+    title = trimws(input$make_title %||% ""),
+    source = "user",
+    created = as.character(Sys.Date()),
+    version = "",
+    metadata_path = metadata_path,
+    has_metadata = has_metadata,
     stringsAsFactors = FALSE
   )
   

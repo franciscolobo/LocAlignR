@@ -14,6 +14,17 @@ infer_type <- function(name, path) {
   if (grepl("(nt|dna|nucl)", x)) "nucl" else "prot"
 }
 
+make_db_registry_name <- function(name, backend) {
+  name <- trimws(name)
+  backend <- tolower(trimws(backend %||% "blast"))
+  
+  if (grepl("_(blast|diamond)$", name, ignore.case = TRUE)) {
+    return(name)
+  }
+  
+  paste0(name, "_", backend)
+}
+
 load_or_default_config <- function(cfg_file = "config.yml") {
   cfg_path <- normalizePath(cfg_file, winslash = "/", mustWork = FALSE)
   
@@ -24,8 +35,6 @@ load_or_default_config <- function(cfg_file = "config.yml") {
     }
   }
   
-  # Fallback default used when config.yml is absent.
-  # Keep this aligned with your local development defaults.
   list(
     databases = list(
       Mlig_core_nt = "/Users/pereiralobof2/Projects/Erin/WolfBLAST/databases/Mlig_core_nt",
@@ -67,15 +76,12 @@ log_user_db_file <- function(path, user_df) {
   }
   
   for (i in seq_len(nrow(user_df))) {
-    backend_txt <- if ("backend" %in% names(user_df) && nzchar(user_df$backend[i])) {
-      sprintf(", backend=%s", user_df$backend[i])
-    } else {
-      ""
-    }
-    
     message(sprintf(
-      "[REGISTRY] user_dbs.yml entry: %s -> %s (type=%s%s)",
-      user_df$name[i], user_df$path[i], user_df$type[i], backend_txt
+      "[REGISTRY] user_dbs.yml entry: %s -> %s (type=%s, backend=%s)",
+      user_df$name[i],
+      user_df$path[i],
+      user_df$type[i],
+      user_df$backend[i]
     ))
   }
   
@@ -91,34 +97,37 @@ log_registry_entries <- function(reg) {
   message(sprintf("[REGISTRY] merged entries: %d", nrow(reg)))
   
   for (i in seq_len(nrow(reg))) {
-    backend_txt <- if ("backend" %in% names(reg) && nzchar(reg$backend[i])) {
-      sprintf(", backend=%s", reg$backend[i])
-    } else {
-      ""
-    }
-    
     message(sprintf(
-      "[REGISTRY] registry: %s -> %s (type=%s%s)",
-      reg$name[i], reg$path[i], reg$type[i], backend_txt
+      "[REGISTRY] registry: %s -> %s (type=%s, backend=%s)",
+      reg$name[i],
+      reg$path[i],
+      reg$type[i],
+      reg$backend[i]
     ))
   }
   
   invisible(NULL)
 }
 
-# ---- Seed registry (from config.yml) ----
-
 build_seed_registry <- function(cfg) {
   dbs <- cfg$databases
   
   if (is.null(dbs) || !length(dbs)) {
-    return(data.frame(
-      name = character(),
-      path = character(),
-      type = character(),
-      backend = character(),
-      stringsAsFactors = FALSE
-    ))
+    return(
+      data.frame(
+        name = character(),
+        path = character(),
+        type = character(),
+        backend = character(),
+        title = character(),
+        source = character(),
+        created = character(),
+        version = character(),
+        metadata_path = character(),
+        has_metadata = logical(),
+        stringsAsFactors = FALSE
+      )
+    )
   }
   
   nms <- names(dbs)
@@ -129,11 +138,15 @@ build_seed_registry <- function(cfg) {
     path = normalizePath(paths, winslash = "/", mustWork = FALSE),
     type = mapply(infer_type, nms, paths, USE.NAMES = FALSE),
     backend = "blast",
+    title = nms,
+    source = "seed",
+    created = "",
+    version = "",
+    metadata_path = "",
+    has_metadata = FALSE,
     stringsAsFactors = FALSE
   )
 }
-
-# ---- Load user registry (with backward compatibility) ----
 
 load_user_dbs <- function(path = user_db_file) {
   empty_df <- data.frame(
@@ -141,6 +154,12 @@ load_user_dbs <- function(path = user_db_file) {
     path = character(),
     type = character(),
     backend = character(),
+    title = character(),
+    source = character(),
+    created = character(),
+    version = character(),
+    metadata_path = character(),
+    has_metadata = logical(),
     stringsAsFactors = FALSE
   )
   
@@ -151,7 +170,7 @@ load_user_dbs <- function(path = user_db_file) {
   
   nm <- names(y)
   
-  df <- lapply(seq_along(y), function(i) {
+  rows <- lapply(seq_along(y), function(i) {
     entry <- y[[i]]
     
     path_val <- as.character(entry$path %||% "")
@@ -159,11 +178,7 @@ load_user_dbs <- function(path = user_db_file) {
     backend_val <- as.character(entry$backend %||% "")
     
     if (!nzchar(backend_val)) {
-      if (grepl("\\.dmnd$", path_val, ignore.case = TRUE)) {
-        backend_val <- "diamond"
-      } else {
-        backend_val <- "blast"
-      }
+      backend_val <- if (grepl("\\.dmnd$", path_val, ignore.case = TRUE)) "diamond" else "blast"
     }
     
     data.frame(
@@ -171,14 +186,18 @@ load_user_dbs <- function(path = user_db_file) {
       path = path_val,
       type = type_val,
       backend = tolower(backend_val),
+      title = as.character(entry$title %||% ""),
+      source = as.character(entry$source %||% "user"),
+      created = as.character(entry$created %||% ""),
+      version = as.character(entry$version %||% ""),
+      metadata_path = as.character(entry$metadata_path %||% ""),
+      has_metadata = as.logical(entry$has_metadata %||% FALSE),
       stringsAsFactors = FALSE
     )
   })
   
-  do.call(rbind, df)
+  dplyr::bind_rows(rows)
 }
-
-# ---- Save user registry ----
 
 save_user_dbs <- function(df, path = user_db_file) {
   ensure_user_db_dir()
@@ -192,11 +211,14 @@ save_user_dbs <- function(df, path = user_db_file) {
   
   lst <- setNames(
     lapply(seq_len(nrow(df)), function(i) {
-      list(
-        path = df$path[i],
-        type = df$type[i],
-        backend = df$backend[i]
-      )
+      row <- df[i, , drop = FALSE]
+      
+      x <- as.list(row)
+      x <- lapply(x, function(v) {
+        if (length(v) == 0 || is.na(v)) NULL else as.character(v)
+      })
+      
+      x[!vapply(x, is.null, logical(1))]
     }),
     df$name
   )
@@ -208,24 +230,34 @@ save_user_dbs <- function(df, path = user_db_file) {
   invisible(NULL)
 }
 
-# ---- Merge seed + user ----
-
 merge_seed_and_user_registry <- function(seed, user) {
-  if (is.null(seed) || !nrow(seed)) {
-    return(user)
+  if (is.null(seed)) seed <- data.frame(stringsAsFactors = FALSE)
+  if (is.null(user)) user <- data.frame(stringsAsFactors = FALSE)
+  
+  all_cols <- union(names(seed), names(user))
+  
+  add_missing_cols <- function(df, cols) {
+    missing <- setdiff(cols, names(df))
+    
+    for (nm in missing) {
+      df[[nm]] <- ""
+    }
+    
+    df[, cols, drop = FALSE]
   }
   
-  if (is.null(user) || !nrow(user)) {
-    return(seed)
-  }
+  seed <- add_missing_cols(seed, all_cols)
+  user <- add_missing_cols(user, all_cols)
+  
+  if (!nrow(seed)) return(user)
+  if (!nrow(user)) return(seed)
   
   merged <- seed[!(seed$name %in% user$name), , drop = FALSE]
   merged <- rbind(merged, user)
   rownames(merged) <- NULL
+  
   merged
 }
-
-# ---- Allowed DBs per program + aligner ----
 
 allowed_db_choices_for_program <- function(reg, program, aligner = "BLAST") {
   aligner <- toupper(aligner %||% "BLAST")
@@ -240,8 +272,6 @@ allowed_db_choices_for_program <- function(reg, program, aligner = "BLAST") {
     c(reg$name[reg$backend == "blast" & reg$type == "prot"], "nr")
   }
 }
-
-# ---- Resolve DB selection ----
 
 resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST") {
   aligner <- toupper(aligner %||% "BLAST")

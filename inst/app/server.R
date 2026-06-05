@@ -134,10 +134,10 @@ server <- function(input, output, session) {
   )
  
   # ---------- Metadata load ----------
-  subject_meta <- load_subject_meta(
-    tsv_path = "metadata/subject_meta.tsv",
-    csv_path = "metadata/subject_meta.csv"
-  )
+  subject_meta <- reactive({
+    req(input$db)
+    load_subject_meta_for_db(input$db, db_registry())
+  })
   
   # ---------- Config + registry ----------
   cfg <- load_or_default_config("config.yml")
@@ -355,7 +355,7 @@ server <- function(input, output, session) {
   # ---- Results table ----
   output$alignmentResults <- renderDT({
     df <- parsedresults()
-    render_alignment_results_dt(df = df, subject_meta = subject_meta)
+    render_alignment_results_dt(df = df, subject_meta = subject_meta())
   })
   
   # ---- Clicked row summary ----
@@ -366,7 +366,7 @@ server <- function(input, output, session) {
     df <- parsedresults()
     row <- df[sel, , drop = FALSE]
     
-    render_clicked_summary_table(row = row, subject_meta = subject_meta)
+    render_clicked_summary_table(row = row, subject_meta = subject_meta())
   },
   rownames = FALSE, colnames = FALSE,
   sanitize.text.function = function(x) x)
@@ -396,7 +396,7 @@ server <- function(input, output, session) {
         file         = file,
         xml_doc      = x,
         df           = df,
-        subject_meta = subject_meta
+        subject_meta = subject_meta()
       )
     }
   )
