@@ -21,10 +21,11 @@ source("R/01_metadata.R")
 source("R/02_user_db_registry.R")
 source("R/03_alignment_rendering.R")
 source("R/04_blast_xml.R")
-source("R/05_makeblastdb.R")
-source("R/06_diamond_xml.R")
+source("R/05_diamond_xml.R")
+source("R/06_makeseqdb.R")
 source("R/07_aligner_dispatch.R")
 source("R/08_aligner_params.R")
+source("R/09_search_strategy.R")
 source("R/90_diagnostics.R", local = TRUE)
 
 server <- function(input, output, session) {
@@ -45,7 +46,7 @@ server <- function(input, output, session) {
     lbl <- if (identical(aligner, "DIAMOND")) "Run DIAMOND" else "Run BLAST"
     actionButton("blast", lbl)
   })
- 
+  
   output$aligner_param_controls <- renderUI({
     aligner <- toupper(input$aligner %||% "BLAST")
     program <- input$program %||% NULL
@@ -132,7 +133,7 @@ server <- function(input, output, session) {
     },
     ignoreInit = TRUE
   )
- 
+  
   # ---------- Metadata load ----------
   subject_meta <- reactive({
     req(input$db)
@@ -151,6 +152,8 @@ server <- function(input, output, session) {
   log_registry_entries(reg0)
   
   db_registry <- reactiveVal(reg0)
+  
+  pending_strategy <- reactiveVal(NULL)
   
   allowed_db_choices <- function(program, aligner = NULL) {
     reg <- db_registry()
@@ -334,6 +337,64 @@ server <- function(input, output, session) {
     invisible(blastresults())
   })
   
+  # ---- Load search strategy from file
+  
+  observeEvent(
+    list(input$aligner, input$aligner_preset),
+    {
+      strategy <- pending_strategy()
+      req(!is.null(strategy))
+      
+      aligner <- toupper(strategy$aligner %||% "BLAST")
+      
+      req(identical(toupper(input$aligner %||% ""), aligner))
+      
+      preset <- strategy$preset %||% ""
+      valid_presets <- preset_choices(aligner)
+      
+      if (nzchar(preset) && preset %in% valid_presets) {
+        updateSelectInput(session, "aligner_preset", selected = preset)
+      }
+      
+      if (nzchar(strategy$program %||% "")) {
+        updateSelectInput(session, "program", selected = strategy$program)
+      }
+      
+      if (nzchar(strategy$database %||% "")) {
+        updateSelectInput(session, "db", selected = strategy$database)
+      }
+      
+      if (nzchar(strategy$evalue %||% "")) {
+        updateTextInput(session, "eval", value = as.character(strategy$evalue))
+      }
+      
+      updateCheckboxInput(
+        session,
+        "show_advanced_params",
+        value = isTRUE(strategy$show_advanced_params)
+      )
+      
+      params <- strategy$parameters %||% list()
+      
+      session$onFlushed(function() {
+        for (nm in names(params)) {
+          id <- aligner_param_input_id(nm)
+          val <- params[[nm]]
+          
+          if (is.null(val)) next
+          
+          updateTextInput(session, id, value = as.character(val))
+          updateNumericInput(session, id, value = suppressWarnings(as.numeric(val)))
+          updateSelectInput(session, id, selected = as.character(val))
+        }
+        
+        pending_strategy(NULL)
+        showNotification("Search strategy loaded.", type = "message")
+      }, once = TRUE)
+    },
+    ignoreInit = TRUE
+  )
+  
   # ---- Load alignment XML from file ----
   observeEvent(input$blast_xml, {
     req(is.list(input$blast_xml), nzchar(input$blast_xml$datapath), file.exists(input$blast_xml$datapath))
@@ -411,6 +472,29 @@ server <- function(input, output, session) {
     }
   )
   
+  output$download_strategy <- downloadHandler(
+    filename = function() {
+      paste0("localignr_search_strategy_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".json")
+    },
+    content = function(file) {
+      aligner <- toupper(input$aligner %||% "BLAST")
+      program <- input$program %||% NULL
+      
+      params <- collect_aligner_params(
+        input = input,
+        aligner = aligner,
+        program = program
+      )
+      
+      strategy <- build_search_strategy(
+        input = input,
+        params = params
+      )
+      
+      write_search_strategy(strategy, file)
+    }
+  )
+  
   # ---- Build local sequence DB ----
   make_log <- reactiveVal("")
   append_make_log <- function(...) {
@@ -448,13 +532,41 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   observeEvent(input$make_run, {
-    run_makeblastdb_and_register(
+    run_makeseqdb_and_register(
       input          = input,
       cfg            = cfg,
       db_registry    = db_registry,
       allowed_db_fun = function(program) allowed_db_choices(program, aligner = "BLAST"),
       session        = session,
       append_log     = append_make_log
+    )
+  })
+  observeEvent(input$upload_strategy, {
+    req(
+      is.list(input$upload_strategy),
+      nzchar(input$upload_strategy$datapath),
+      file.exists(input$upload_strategy$datapath)
+    )
+    
+    strategy <- tryCatch(
+      read_search_strategy(input$upload_strategy$datapath),
+      error = function(e) {
+        showNotification(
+          paste("Could not load search strategy:", e$message),
+          type = "error"
+        )
+        NULL
+      }
+    )
+    
+    req(!is.null(strategy))
+    
+    pending_strategy(strategy)
+    
+    updateSelectInput(
+      session,
+      "aligner",
+      selected = toupper(strategy$aligner %||% "BLAST")
     )
   })
 }

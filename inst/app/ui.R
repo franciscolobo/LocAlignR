@@ -26,7 +26,7 @@ ui <- fluidPage(
       div(
         class = "panel-group",
         id = "taskAccordion",
-        panel_run_blast(),
+        panel_run_aligner(),
         panel_load_xml(),
         panel_build_db()
       )

@@ -1,6 +1,6 @@
 # R/05_makeblastdb.R
 
-run_makeblastdb_and_register <- function(
+run_makeseqdb_and_register <- function(
     input,
     cfg,
     db_registry,

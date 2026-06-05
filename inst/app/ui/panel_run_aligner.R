@@ -1,6 +1,6 @@
 # app/ui/panel_run_aligner.R
 
-panel_run_blast <- function() {
+panel_run_aligner <- function() {
   div(
     class = "panel panel-default",
     div(
@@ -20,13 +20,13 @@ panel_run_blast <- function() {
       class = "panel-collapse collapse in",
       div(
         class = "panel-body",
-
+        
         radioButtons(
           "input_mode", "Sequence input:",
           choices = c("Paste" = "paste", "Upload FASTA" = "upload"),
           inline = TRUE
         ),
-
+        
         conditionalPanel(
           "input.input_mode == 'paste'",
           textAreaInput("query", "Input sequence:", width = "100%", height = "260px")
@@ -38,7 +38,7 @@ panel_run_blast <- function() {
             accept = c(".fa", ".fasta", ".faa", ".fas", ".fna", ".txt")
           )
         ),
-
+        
         selectInput("aligner", "Aligner:", choices = c("BLAST", "DIAMOND"), selected = "BLAST"),
         selectInput("program", "Program:", choices = c("blastp", "blastx", "blastn", "tblastn", "tblastx")),
         selectInput("db", "Database:", choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")),
@@ -55,7 +55,7 @@ panel_run_blast <- function() {
           value = FALSE
         ),
         uiOutput("aligner_param_controls"),
-
+        
         fluidRow(
           column(6, uiOutput("run_action_button"))
         ),
@@ -64,6 +64,20 @@ panel_run_blast <- function() {
         ),
         fluidRow(
           column(12, downloadButton("download_xml", "Download XML"))
+        ),
+        fluidRow(
+          column(
+            width = 6,
+            downloadButton("download_strategy", "Download search strategy")
+          ),
+          column(
+            width = 6,
+            fileInput(
+              "upload_strategy",
+              "Load search strategy",
+              accept = c(".json")
+            )
+          )
         )
       )
     )
