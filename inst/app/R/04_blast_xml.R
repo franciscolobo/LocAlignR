@@ -331,35 +331,41 @@ render_clicked_summary_table <- function(row, subject_meta) {
 }
 
 render_alignment_for_row <- function(xml_doc, row_index, width = 40) {
-  # sequences per HSP
-  al <- XML::xpathApply(xml_doc, "//Iteration", function(row) {
-    top <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_qseq") %>% sapply(XML::xmlValue)
-    mid <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_midline") %>% sapply(XML::xmlValue)
-    bot <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_hseq") %>% sapply(XML::xmlValue)
-    rbind(top, mid, bot)
-  })
-  ax <- do.call("cbind", al)
+  hsps <- XML::getNodeSet(xml_doc, "//Hsp")
   
-  # coordinates per HSP
-  pos <- XML::xpathApply(xml_doc, "//Iteration", function(row) {
-    qf <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
-    qt <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
-    hf <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_hit-from") %>% sapply(XML::xmlValue)
-    ht <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_hit-to") %>% sapply(XML::xmlValue)
-    rbind(qf, qt, hf, ht)
-  })
-  px <- do.call("cbind", pos)
+  shiny::validate(
+    shiny::need(length(hsps) >= row_index, "Selected alignment was not found in the XML.")
+  )
   
-  i <- row_index
+  hsp <- hsps[[row_index]]
+  
+  get_text <- function(node, tag) {
+    x <- XML::getNodeSet(node, tag)
+    if (!length(x)) return("")
+    as.character(XML::xmlValue(x[[1]]))
+  }
+  
+  get_int <- function(node, tag) {
+    suppressWarnings(as.integer(get_text(node, tag)))
+  }
+  
+  qseq_local <- get_text(hsp, "Hsp_qseq")
+  mid_local  <- get_text(hsp, "Hsp_midline")
+  hseq_local <- get_text(hsp, "Hsp_hseq")
+  
+  q_from_local <- get_int(hsp, "Hsp_query-from")
+  q_to_local   <- get_int(hsp, "Hsp_query-to")
+  h_from_local <- get_int(hsp, "Hsp_hit-from")
+  h_to_local   <- get_int(hsp, "Hsp_hit-to")
   
   wrap_alignment_with_coords(
-    qseq   = ax[1, i],
-    mid    = ax[2, i],
-    hseq   = ax[3, i],
-    q_from = as.integer(px[1, i]),
-    q_to   = as.integer(px[2, i]),
-    h_from = as.integer(px[3, i]),
-    h_to   = as.integer(px[4, i]),
+    qseq   = qseq_local,
+    mid    = mid_local,
+    hseq   = hseq_local,
+    q_from = q_from_local,
+    q_to   = q_to_local,
+    h_from = h_from_local,
+    h_to   = h_to_local,
     width  = width
   )
 }

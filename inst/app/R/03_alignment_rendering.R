@@ -32,59 +32,75 @@ wrap_alignment <- function(q, m, h, width = 40) {
 }
 
 # Displays alignment plus coordinates
-wrap_alignment_with_coords <- function(qseq, mid, hseq, q_from, q_to, h_from, h_to, width = 40) {
-  qv <- strsplit(qseq, "", fixed = TRUE)[[1]]
-  mv <- strsplit(mid,  "", fixed = TRUE)[[1]]
-  hv <- strsplit(hseq, "", fixed = TRUE)[[1]]
-  n  <- length(qv)
-
-  step_val <- function(a, b) ifelse(b >= a, 1L, -1L)
-  q_step <- step_val(q_from, q_to)
-  h_step <- step_val(h_from, h_to)
-
-  coord_vec <- function(chars, start, step) {
-    out <- rep(NA_integer_, length(chars))
-    cur <- as.integer(start)
-    for (i in seq_along(chars)) {
-      if (chars[i] != "-") {
-        out[i] <- cur
-        cur <- cur + step
-      }
+wrap_alignment_with_coords <- function(qseq, mid, hseq,
+                                       q_from, q_to,
+                                       h_from, h_to,
+                                       width = 40) {
+  qseq <- paste(as.character(qseq), collapse = "")
+  mid  <- paste(as.character(mid), collapse = "")
+  hseq <- paste(as.character(hseq), collapse = "")
+  
+  if (!nzchar(mid)) {
+    mid <- paste(rep(" ", nchar(qseq)), collapse = "")
+  }
+  
+  q_from <- as.integer(q_from)
+  q_to   <- as.integer(q_to)
+  h_from <- as.integer(h_from)
+  h_to   <- as.integer(h_to)
+  width  <- as.integer(width)
+  
+  if (!nzchar(qseq) || !nzchar(hseq)) {
+    return("Alignment sequence is missing.")
+  }
+  
+  if (!is.finite(q_from) || !is.finite(q_to) ||
+      !is.finite(h_from) || !is.finite(h_to)) {
+    return("Alignment coordinates are missing.")
+  }
+  
+  n <- nchar(qseq)
+  starts <- seq(1, n, by = width)
+  
+  q_forward <- q_to >= q_from
+  h_forward <- h_to >= h_from
+  
+  q_pos <- q_from
+  h_pos <- h_from
+  
+  chunks <- lapply(starts, function(start) {
+    end <- min(start + width - 1, n)
+    
+    q_chunk <- substr(qseq, start, end)
+    m_chunk <- substr(mid, start, end)
+    h_chunk <- substr(hseq, start, end)
+    
+    q_letters <- nchar(gsub("-", "", q_chunk))
+    h_letters <- nchar(gsub("-", "", h_chunk))
+    
+    q_start <- q_pos
+    h_start <- h_pos
+    
+    if (q_letters > 0) {
+      q_end <- if (q_forward) q_pos + q_letters - 1L else q_pos - q_letters + 1L
+      q_pos <<- if (q_forward) q_end + 1L else q_end - 1L
+    } else {
+      q_end <- q_start
     }
-    out
-  }
-
-  qcoord <- coord_vec(qv, q_from, q_step)
-  hcoord <- coord_vec(hv, h_from, h_step)
-
-  lr <- function(vseg) {
-    ii <- which(!is.na(vseg))
-    if (!length(ii)) return(c("", ""))
-    c(as.character(vseg[min(ii)]), as.character(vseg[max(ii)]))
-  }
-
-  out <- character()
-  for (s in seq(1, n, by = width)) {
-    e <- min(s + width - 1, n)
-
-    qs <- paste(qv[s:e], collapse = "")
-    ms <- paste(mv[s:e], collapse = "")
-    hs <- paste(hv[s:e], collapse = "")
-
-    qlr <- lr(qcoord[s:e])
-    hlr <- lr(hcoord[s:e])
-
-    lw <- max(nchar(qlr[1]), nchar(hlr[1]), 1)
-    rw <- max(nchar(qlr[2]), nchar(hlr[2]), 1)
-
-    out <- c(
-      out,
-      sprintf("%-6s %*s  %s  %*s", "Query", lw, qlr[1], qs, rw, qlr[2]),
-      sprintf("%-6s %*s  %s  %*s", "",     lw, "",      ms, rw, ""     ),
-      sprintf("%-6s %*s  %s  %*s", "Hit",  lw, hlr[1], hs, rw, hlr[2]),
-      ""
+    
+    if (h_letters > 0) {
+      h_end <- if (h_forward) h_pos + h_letters - 1L else h_pos - h_letters + 1L
+      h_pos <<- if (h_forward) h_end + 1L else h_end - 1L
+    } else {
+      h_end <- h_start
+    }
+    
+    paste0(
+      sprintf("Query %6d  %s  %6d", q_start, q_chunk, q_end), "\n",
+      sprintf("             %s", m_chunk), "\n",
+      sprintf("Sbjct %6d  %s  %6d", h_start, h_chunk, h_end)
     )
-  }
-
-  paste(out, collapse = "\n")
+  })
+  
+  paste(unlist(chunks), collapse = "\n\n")
 }
