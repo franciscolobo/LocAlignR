@@ -219,6 +219,27 @@ server <- function(input, output, session) {
   # Current XML (from a fresh run or a loaded file)
   xml_current <- reactiveVal(NULL)
   
+  last_run_signature <- reactiveVal(NULL)
+  
+  current_run_signature <- reactive({
+    list(
+      aligner = input$aligner %||% "",
+      program = input$program %||% "",
+      db = input$db %||% "",
+      evalue = input$eval %||% ""
+    )
+  })
+  
+  observeEvent(current_run_signature(), {
+    sig <- current_run_signature()
+    last <- last_run_signature()
+    
+    if (!is.null(last) && !identical(sig, last)) {
+      xml_current(NULL)
+      logf("[RUN] Cleared stale alignment results after input change")
+    }
+  }, ignoreInit = TRUE)
+  
   use_upload <- reactive({
     is.list(input$fasta) &&
       !is.null(input$fasta$datapath) &&
@@ -323,6 +344,7 @@ server <- function(input, output, session) {
     if (exists(key, envir = .cache, inherits = FALSE)) {
       xml <- get(key, envir = .cache, inherits = FALSE)
       xml_current(xml)
+      last_run_signature(current_run_signature())
       return(xml)
     }
     
@@ -343,6 +365,7 @@ server <- function(input, output, session) {
     
     assign(key, xml, envir = .cache)
     xml_current(xml)
+    last_run_signature(current_run_signature())
     xml
   }, ignoreNULL = TRUE)
   
