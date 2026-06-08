@@ -54,15 +54,15 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
   max_hsps <- as.integer(params$max_hsps %||% 1L)
   threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
   timeout <- as.integer(params$timeout_sec %||% 1800L)
-  
   max_hsps <- as.integer(params$max_hsps %||% 1L)
-  
+  culling_limit <- params$culling_limit %||% NULL
+  best_hit_overhang <- params$best_hit_overhang %||% NULL
+  best_hit_score_edge <- params$best_hit_score_edge %||% NULL
   word_size <- params$word_size %||% NULL
   matrix <- params$matrix %||% NULL
-  
   gapopen <- params$gapopen %||% NULL
   gapextend <- params$gapextend %||% NULL
-
+  
   args <- c(
     "-query", query,
     "-db", db,
@@ -88,23 +88,52 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
     args <- c(args, "-gapextend", as.character(as.integer(gapextend)))
   }
   
+  if (!is.null(culling_limit) && length(culling_limit) > 0 && !is.na(culling_limit)) {
+    args <- c(args, "-culling_limit", as.character(as.integer(culling_limit)))
+  }
+  
+  has_best_hit_overhang <- !is.null(best_hit_overhang) &&
+    length(best_hit_overhang) > 0 &&
+    !is.na(best_hit_overhang)
+  
+  has_best_hit_score_edge <- !is.null(best_hit_score_edge) &&
+    length(best_hit_score_edge) > 0 &&
+    !is.na(best_hit_score_edge)
+  
+  if (xor(has_best_hit_overhang, has_best_hit_score_edge)) {
+    shiny::validate(
+      shiny::need(
+        FALSE,
+        "BLAST best-hit filtering requires both best-hit overhang and best-hit score edge."
+      )
+    )
+  }
+  
+  if (has_best_hit_overhang && has_best_hit_score_edge) {
+    args <- c(
+      args,
+      "-best_hit_overhang", as.character(best_hit_overhang),
+      "-best_hit_score_edge", as.character(best_hit_score_edge)
+    )
+  }
+  
   if (isTRUE(remote)) {
     args <- c(args, "-remote")
   } else {
     args <- c(args, "-num_threads", as.character(threads))
   }
-
+  
   prog_path <- LocAlignR::localignr_find_tool(
     prog,
     env_var = paste0("LOCALIGN_", toupper(prog))
   )
-
+  
   message(sprintf("[BLAST] program=%s", prog))
   message(sprintf("[BLAST] executable=%s", prog_path))
   message(sprintf("[BLAST] query=%s", query))
   message(sprintf("[BLAST] db=%s", db))
   message(sprintf("[BLAST] args=%s", paste(shQuote(args), collapse = " ")))
-
+  
   shiny::validate(
     shiny::need(
       nzchar(prog_path),
@@ -116,7 +145,7 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
       )
     )
   )
-
+  
   res <- processx::run(
     prog_path,
     args,
@@ -124,11 +153,11 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
     timeout = timeout,
     echo = FALSE
   )
-
+  
   message(sprintf("[BLAST] exit status=%s", res$status))
   if (nzchar(res$stdout)) message(sprintf("[BLAST] stdout chars=%d", nchar(res$stdout)))
   if (nzchar(res$stderr)) message(sprintf("[BLAST] stderr=%s", res$stderr))
-
+  
   shiny::validate(
     shiny::need(
       res$status == 0,
@@ -143,7 +172,7 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
       paste0("BLAST returned no XML output.\n\nSTDERR:\n", res$stderr)
     )
   )
-
+  
   XML::xmlParse(res$stdout, asText = TRUE, useInternalNodes = TRUE)
 }
 

@@ -89,6 +89,32 @@ aligner_parameter_spec <- function() {
         level = "advanced"
       ),
       
+      culling_limit = list(
+        label = "Culling limit",
+        input = "numeric_optional",
+        default = NULL,
+        min = 0L,
+        step = 1L,
+        level = "advanced",
+        help = "Suppress lower-scoring hits whose query range is enveloped by higher-scoring hits. Leave blank to disable."
+      ),
+      
+      best_hit_overhang = list(
+        label = "Best-hit overhang",
+        input = "numeric_decimal",
+        default = NULL,
+        level = "advanced",
+        help = "BLAST best-hit filtering overhang. Requires best-hit score edge."
+      ),
+      
+      best_hit_score_edge = list(
+        label = "Best-hit score edge",
+        input = "numeric_decimal",
+        default = NULL,
+        level = "advanced",
+        help = "BLAST best-hit filtering score edge. Requires best-hit overhang."
+      ),
+      
       word_size = list(
         label = "Word size",
         input = "numeric_optional",
@@ -218,7 +244,12 @@ aligner_param_input_id <- function(param_name) {
   paste0("aligner_param__", param_name)
 }
 
-render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanced = FALSE) {
+render_aligner_parameter_inputs <- function(
+    aligner,
+    program = NULL,
+    show_advanced = FALSE,
+    values = list()
+) {
   defs <- get_aligner_parameter_defs(aligner, program)
   
   if (!length(defs)) {
@@ -244,6 +275,7 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanc
   widgets <- lapply(names(defs), function(param_name) {
     def <- defs[[param_name]]
     id <- aligner_param_input_id(param_name)
+    value <- values[[param_name]] %||% def$default
     
     widget <- switch(
       def$input,
@@ -251,7 +283,7 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanc
       numeric = numericInput(
         inputId = id,
         label = def$label,
-        value = def$default,
+        value = value,
         min = def$min %||% NA,
         max = def$max %||% NA,
         step = def$step %||% NA
@@ -260,14 +292,14 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanc
       numeric_optional = textInput(
         inputId = id,
         label = def$label,
-        value = if (is.null(def$default)) "" else as.character(def$default),
+        value = if (is.null(value)) "" else as.character(value),
         placeholder = def$placeholder %||% "Use program default"
       ),
       
       numeric_decimal = textInput(
         inputId = id,
         label = def$label,
-        value = if (is.null(def$default)) "" else as.character(def$default),
+        value = if (is.null(value)) "" else as.character(value),
         placeholder = def$placeholder %||% "Use program default"
       ),
       
@@ -275,7 +307,7 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanc
         inputId = id,
         label = def$label,
         choices = def$choices,
-        selected = def$default
+        selected = value
       ),
       
       stop("Unsupported parameter input type: ", def$input)
@@ -297,30 +329,58 @@ render_aligner_parameter_inputs <- function(aligner, program = NULL, show_advanc
 }
 
 coerce_aligner_param_value <- function(raw_value, def) {
-  
-  if (identical(def$input, "numeric_decimal")) {
-    txt <- trimws(as.character(raw_value %||% ""))
-    if (!nzchar(txt)) {
-      return(NULL)
-    }
-    return(as.numeric(txt))
-  }
-  
   if (identical(def$input, "numeric")) {
-    if (is.null(raw_value) || is.na(raw_value)) {
+    if (is.null(raw_value) || length(raw_value) == 0 || is.na(raw_value)) {
       return(def$default)
     }
-    return(as.integer(raw_value))
+    
+    value <- suppressWarnings(as.integer(raw_value))
+    
+    if (!is.finite(value)) {
+      return(def$default)
+    }
+    
+    return(value)
   }
   
   if (identical(def$input, "numeric_optional")) {
+    if (is.null(raw_value) || length(raw_value) == 0) {
+      return(NULL)
+    }
+    
     txt <- trimws(as.character(raw_value %||% ""))
     
     if (!nzchar(txt)) {
       return(NULL)
     }
     
-    return(as.integer(txt))
+    value <- suppressWarnings(as.integer(txt))
+    
+    if (!is.finite(value)) {
+      return(NULL)
+    }
+    
+    return(value)
+  }
+  
+  if (identical(def$input, "numeric_decimal")) {
+    if (is.null(raw_value) || length(raw_value) == 0) {
+      return(NULL)
+    }
+    
+    txt <- trimws(as.character(raw_value %||% ""))
+    
+    if (!nzchar(txt)) {
+      return(NULL)
+    }
+    
+    value <- suppressWarnings(as.numeric(txt))
+    
+    if (!is.finite(value)) {
+      return(NULL)
+    }
+    
+    return(value)
   }
   
   if (identical(def$input, "select")) {

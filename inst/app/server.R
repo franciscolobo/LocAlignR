@@ -15,7 +15,7 @@ library(shinyFiles)
 
 app_root <- normalizePath(".", winslash = "/", mustWork = TRUE)
 
-# Source helpers (paths are relative to the app directory)
+# Source helpers
 source("R/00_utils.R")
 source("R/01_metadata.R")
 source("R/02_user_db_registry.R")
@@ -26,17 +26,22 @@ source("R/06_makeseqdb.R")
 source("R/07_aligner_dispatch.R")
 source("R/08_aligner_params.R")
 source("R/09_search_strategy.R")
+source("R/10_user_preferences.R")
 source("R/90_diagnostics.R", local = TRUE)
 
 server <- function(input, output, session) {
   session$onSessionEnded(function() stopApp())
   
-  app_path <- function(...) {
-    file.path(getwd(), ...)
-  }
-  
+  # ---- Diagnostics ----
   wire_diagnostics(output)
   
+  # ---- Load persisted user preferences once at startup ----
+  user_prefs <- load_user_preferences()
+  
+  restored_param_values <- reactiveVal(user_prefs$parameters %||% list())
+  restoring_preferences <- reactiveVal(length(user_prefs) > 0)
+  
+  # ---- Run panel labels ----
   output$run_panel_title <- renderUI({
     "Run alignment"
   })
@@ -47,6 +52,7 @@ server <- function(input, output, session) {
     actionButton("blast", lbl)
   })
   
+  # ---- Dynamic parameter UI ----
   output$aligner_param_controls <- renderUI({
     aligner <- toupper(input$aligner %||% "BLAST")
     program <- input$program %||% NULL
@@ -54,12 +60,14 @@ server <- function(input, output, session) {
     render_aligner_parameter_inputs(
       aligner = aligner,
       program = program,
-      show_advanced = isTRUE(input$show_advanced_params)
+      show_advanced = isTRUE(input$show_advanced_params),
+      values = restored_param_values()
     )
   })
   
   output$aligner_preset_control <- renderUI({
     aligner <- toupper(input$aligner %||% "BLAST")
+    
     selectInput(
       "aligner_preset",
       "Preset",
@@ -68,12 +76,13 @@ server <- function(input, output, session) {
     )
   })
   
+  # ---- Apply preset values to visible parameter controls ----
   observeEvent(
-    list(
-      input$aligner,
-      input$aligner_preset
-    ),
+    input$aligner_preset,
     {
+      if (isTRUE(restoring_preferences())) {
+        return(invisible(NULL))
+      }
       
       req(input$aligner_preset)
       
@@ -90,39 +99,26 @@ server <- function(input, output, session) {
       )
       
       for (nm in names(preset)) {
-        
-        if (!nm %in% names(defs)) {
-          next
-        }
+        if (!nm %in% names(defs)) next
         
         id <- aligner_param_input_id(nm)
-        
         def <- defs[[nm]]
         
-        if (def$input == "numeric") {
-          
+        if (identical(def$input, "numeric")) {
           updateNumericInput(
             session,
             id,
             value = preset[[nm]]
           )
           
-        } else if (def$input %in%
-                   c(
-                     "numeric_optional",
-                     "numeric_decimal"
-                   )) {
-          
+        } else if (def$input %in% c("numeric_optional", "numeric_decimal")) {
           updateTextInput(
             session,
             id,
-            value = as.character(
-              preset[[nm]]
-            )
+            value = as.character(preset[[nm]])
           )
           
-        } else if (def$input == "select") {
-          
+        } else if (identical(def$input, "select")) {
           updateSelectInput(
             session,
             id,
@@ -134,7 +130,138 @@ server <- function(input, output, session) {
     ignoreInit = TRUE
   )
   
-  # ---------- Metadata load ----------
+  # ---- Config + registry ----
+  cfg <- load_or_default_config("config.yml")
+  log_registry_config(cfg, cfg_file = "config.yml")
+  
+  seed <- build_seed_registry(cfg)
+  user_df0 <- load_user_dbs()
+  log_user_db_file(user_db_file, user_df0)
+  
+  reg0 <- merge_seed_and_user_registry(seed, user_df0)
+  log_registry_entries(reg0)
+  
+  db_registry <- reactiveVal(reg0)
+  
+  # Search strategy import is applied asynchronously after dynamic UI updates.
+  pending_strategy <- reactiveVal(NULL)
+  
+  # Restore user parameters from last section
+  restoring_preferences <- reactiveVal(FALSE)
+  
+  allowed_db_choices <- function(program, aligner = NULL) {
+    reg <- db_registry()
+    aligner <- toupper(aligner %||% "BLAST")
+    allowed_db_choices_for_program(reg, program, aligner)
+  }
+  
+  # ---- Helper: update parameter inputs from a named parameter list ----
+  apply_parameter_values <- function(params) {
+    for (nm in names(params)) {
+      id <- aligner_param_input_id(nm)
+      val <- params[[nm]]
+      
+      if (is.null(val)) next
+      
+      updateTextInput(session, id, value = as.character(val))
+      updateNumericInput(session, id, value = suppressWarnings(as.numeric(val)))
+      updateSelectInput(session, id, selected = as.character(val))
+    }
+  }
+  
+  # ---- Helper: persist current UI/search settings ----
+  save_current_preferences <- function(params) {
+    prefs <- build_current_preferences(input, params = params)
+    save_user_preferences(prefs)
+    logf("[PREFS] Saved user preferences to %s", user_preferences_file)
+  }
+  
+  # ---- Keep program choices synchronized with selected aligner ----
+  observeEvent(input$aligner, {
+    aligner <- toupper(input$aligner %||% "BLAST")
+    choices <- aligner_program_choices(aligner)
+    
+    selected <- input$program
+    if (is.null(selected) || !(selected %in% choices)) {
+      selected <- choices[1]
+    }
+    
+    updateSelectInput(session, "program", choices = choices, selected = selected)
+  }, ignoreInit = FALSE)
+  
+  # ---- Keep database choices synchronized with selected program + aligner ----
+  observeEvent(list(input$program, input$aligner), {
+    req(input$program)
+    
+    aligner <- toupper(input$aligner %||% "BLAST")
+    choices <- unique(allowed_db_choices(input$program, aligner))
+    
+    if (!length(choices)) {
+      if (identical(aligner, "DIAMOND")) {
+        updateSelectInput(session, "db", choices = character(0), selected = character(0))
+        return(invisible(NULL))
+      }
+      
+      choices <- if (input$program %in% c("blastn", "tblastn", "tblastx")) "nt" else "nr"
+    }
+    
+    selected <- input$db
+    if (is.null(selected) || !(selected %in% choices)) {
+      selected <- choices[1]
+    }
+    
+    updateSelectInput(session, "db", choices = choices, selected = selected)
+  }, ignoreInit = FALSE)
+  
+  # ---- Restore saved user preferences after dynamic UI has initialized ----
+  session$onFlushed(function() {
+    if (!length(user_prefs)) {
+      return(invisible(NULL))
+    }
+    
+    aligner <- toupper(user_prefs$aligner %||% "BLAST")
+    restoring_preferences(TRUE)
+    updateSelectInput(session, "aligner", selected = aligner)
+    
+    session$onFlushed(function() {
+      if (nzchar(user_prefs$program %||% "")) {
+        updateSelectInput(session, "program", selected = user_prefs$program)
+      }
+      
+      if (nzchar(user_prefs$database %||% "")) {
+        updateSelectInput(session, "db", selected = user_prefs$database)
+      }
+      
+      if (nzchar(user_prefs$evalue %||% "")) {
+        updateTextInput(session, "eval", value = as.character(user_prefs$evalue))
+      }
+      
+      if (nzchar(user_prefs$preset %||% "")) {
+        updateSelectInput(session, "aligner_preset", selected = user_prefs$preset)
+      }
+      
+      updateCheckboxInput(
+        session,
+        "show_advanced_params",
+        value = isTRUE(user_prefs$show_advanced_params)
+      )
+      
+      params <- user_prefs$parameters %||% list()
+      
+      session$onFlushed(function() {
+        session$onFlushed(function() {
+          restored_param_values(user_prefs$parameters %||% list())
+          apply_parameter_values(user_prefs$parameters %||% list())
+          
+          logf("[PREFS] Loaded user preferences from %s", user_preferences_file)
+          restoring_preferences(FALSE)
+        }, once = TRUE)
+      }, once = TRUE)
+      
+    }, once = TRUE)
+  }, once = TRUE)
+  
+  # ---- Metadata cache ----
   metadata_cache <- new.env(parent = emptyenv())
   
   subject_meta <- reactive({
@@ -153,73 +280,13 @@ server <- function(input, output, session) {
     meta
   })
   
-  # ---------- Config + registry ----------
-  cfg <- load_or_default_config("config.yml")
-  log_registry_config(cfg, cfg_file = "config.yml")
-  
-  seed <- build_seed_registry(cfg)
-  user_df0 <- load_user_dbs()
-  log_user_db_file(user_db_file, user_df0)
-  
-  reg0 <- merge_seed_and_user_registry(seed, user_df0)
-  log_registry_entries(reg0)
-  
-  db_registry <- reactiveVal(reg0)
-  
-  pending_strategy <- reactiveVal(NULL)
-  
-  allowed_db_choices <- function(program, aligner = NULL) {
-    reg <- db_registry()
-    aligner <- toupper(aligner %||% "BLAST")
-    allowed_db_choices_for_program(reg, program, aligner)
-  }
-  
-  # Keep program choices synchronized with selected aligner
-  observeEvent(input$aligner, {
-    aligner <- toupper(input$aligner %||% "BLAST")
-    choices <- aligner_program_choices(aligner)
-    
-    selected <- input$program
-    if (is.null(selected) || !(selected %in% choices)) {
-      selected <- choices[1]
-    }
-    
-    updateSelectInput(session, "program", choices = choices, selected = selected)
-  }, ignoreInit = FALSE)
-  
-  # Keep database choices synchronized with selected program + aligner
-  observeEvent(list(input$program, input$aligner), {
-    req(input$program)
-    
-    aligner <- toupper(input$aligner %||% "BLAST")
-    choices <- unique(allowed_db_choices(input$program, aligner))
-    
-    if (!length(choices)) {
-      if (identical(aligner, "DIAMOND")) {
-        # No DIAMOND databases registered yet
-        updateSelectInput(session, "db", choices = character(0), selected = character(0))
-        return(invisible(NULL))
-      }
-      
-      # BLAST fallback for remote databases
-      choices <- if (input$program %in% c("blastn", "tblastn", "tblastx")) "nt" else "nr"
-    }
-    
-    selected <- input$db
-    if (is.null(selected) || !(selected %in% choices)) {
-      selected <- choices[1]
-    }
-    
-    updateSelectInput(session, "db", choices = choices, selected = selected)
-  }, ignoreInit = FALSE)
-  
-  # Cache for alignment XML
+  # ---- Alignment XML cache and current result state ----
   .cache <- new.env(parent = emptyenv())
   
-  # Current XML (from a fresh run or a loaded file)
   xml_current <- reactiveVal(NULL)
-  
   last_run_signature <- reactiveVal(NULL)
+  
+  restored_param_values <- reactiveVal(list())
   
   current_run_signature <- reactive({
     list(
@@ -230,6 +297,7 @@ server <- function(input, output, session) {
     )
   })
   
+  # Clear stale results if user changes run-defining inputs before clicking Run.
   observeEvent(current_run_signature(), {
     sig <- current_run_signature()
     last <- last_run_signature()
@@ -275,38 +343,11 @@ server <- function(input, output, session) {
     }
   }, ignoreInit = FALSE)
   
-  # ---- Keep DB builder backend compatible with molecule type ----
-  observeEvent(input$make_type, {
-    req(input$make_type)
-    
-    if (identical(input$make_type, "nucl")) {
-      updateSelectInput(
-        session,
-        "make_backend",
-        choices = c("BLAST" = "blast"),
-        selected = "blast"
-      )
-    } else {
-      selected <- input$make_backend
-      valid_choices <- c("BLAST" = "blast", "DIAMOND" = "diamond")
-      
-      if (is.null(selected) || !(selected %in% unname(valid_choices))) {
-        selected <- "blast"
-      }
-      
-      updateSelectInput(
-        session,
-        "make_backend",
-        choices = valid_choices,
-        selected = selected
-      )
-    }
-  }, ignoreInit = FALSE)
-  
-  # ---- Run alignment (BLAST or DIAMOND) ----
+  # ---- Run alignment ----
   blastresults <- eventReactive(input$blast, {
     aligner <- toupper(input$aligner %||% "BLAST")
     spinner_txt <- if (identical(aligner, "DIAMOND")) "Running DIAMOND..." else "Running BLAST..."
+    
     shinybusy::show_modal_spinner(spin = "fading-circle", text = spinner_txt)
     on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
     
@@ -343,8 +384,11 @@ server <- function(input, output, session) {
     
     if (exists(key, envir = .cache, inherits = FALSE)) {
       xml <- get(key, envir = .cache, inherits = FALSE)
+      
       xml_current(xml)
       last_run_signature(current_run_signature())
+      save_current_preferences(params)
+      
       return(xml)
     }
     
@@ -364,8 +408,11 @@ server <- function(input, output, session) {
     logf("[RUN] XML returned for aligner=%s program=%s", aligner, prog)
     
     assign(key, xml, envir = .cache)
+    
     xml_current(xml)
     last_run_signature(current_run_signature())
+    save_current_preferences(params)
+    
     xml
   }, ignoreNULL = TRUE)
   
@@ -373,11 +420,15 @@ server <- function(input, output, session) {
     invisible(blastresults())
   })
   
-  # ---- Load search strategy from file
-  
+  # ---- Apply uploaded search strategy after dynamic UI updates ----
   observeEvent(
     list(input$aligner, input$aligner_preset),
     {
+      # restore user parameters
+      if (isTRUE(restoring_preferences())) {
+        return(invisible(NULL))
+      }
+      
       strategy <- pending_strategy()
       req(!is.null(strategy))
       
@@ -413,39 +464,39 @@ server <- function(input, output, session) {
       params <- strategy$parameters %||% list()
       
       session$onFlushed(function() {
-        for (nm in names(params)) {
-          id <- aligner_param_input_id(nm)
-          val <- params[[nm]]
-          
-          if (is.null(val)) next
-          
-          updateTextInput(session, id, value = as.character(val))
-          updateNumericInput(session, id, value = suppressWarnings(as.numeric(val)))
-          updateSelectInput(session, id, selected = as.character(val))
-        }
-        
-        pending_strategy(NULL)
-        showNotification("Search strategy loaded.", type = "message")
+        session$onFlushed(function() {
+          restored_param_values(params)          
+          pending_strategy(NULL)
+          showNotification("Search strategy loaded.", type = "message")
+        }, once = TRUE)
       }, once = TRUE)
+      
     },
     ignoreInit = TRUE
   )
   
   # ---- Load alignment XML from file ----
   observeEvent(input$blast_xml, {
-    req(is.list(input$blast_xml), nzchar(input$blast_xml$datapath), file.exists(input$blast_xml$datapath))
+    req(
+      is.list(input$blast_xml),
+      nzchar(input$blast_xml$datapath),
+      file.exists(input$blast_xml$datapath)
+    )
+    
     xml <- XML::xmlParse(input$blast_xml$datapath, useInternalNodes = TRUE)
     xml_current(xml)
   })
   
-  # ---- Parse alignment XML (table data) ----
+  # ---- Parse alignment XML ----
   parsedresults <- reactive({
     x <- xml_current()
     req(!is.null(x))
     
     aligner <- toupper(input$aligner %||% "BLAST")
     out <- parse_aligner_xml_to_df(x, aligner = aligner)
+    
     logf("[ALIGNMENT][%s] Parsed %d rows", aligner, nrow(out))
+    
     out
   })
   
@@ -465,10 +516,11 @@ server <- function(input, output, session) {
     
     render_clicked_summary_table(row = row, subject_meta = subject_meta())
   },
-  rownames = FALSE, colnames = FALSE,
+  rownames = FALSE,
+  colnames = FALSE,
   sanitize.text.function = function(x) x)
   
-  # ---- Alignment text (with coordinates) ----
+  # ---- Alignment text ----
   output$alignment <- renderText({
     sel <- input$alignmentResults_rows_selected
     req(length(sel) == 1)
@@ -479,9 +531,11 @@ server <- function(input, output, session) {
     render_alignment_for_row(xml_doc = x, row_index = sel, width = 40)
   })
   
-  # ---- Report download (uses current XML) ----
+  # ---- Download HTML report ----
   output$download_report <- downloadHandler(
-    filename = function() paste0("align_report_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html"),
+    filename = function() {
+      paste0("align_report_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".html")
+    },
     content = function(file) {
       x <- isolate(xml_current())
       validate(need(!is.null(x), "Load or run alignment first."))
@@ -500,7 +554,9 @@ server <- function(input, output, session) {
   
   # ---- Download raw alignment XML ----
   output$download_xml <- downloadHandler(
-    filename = function() paste0("align_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xml"),
+    filename = function() {
+      paste0("align_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xml")
+    },
     content = function(file) {
       doc <- isolate(xml_current())
       validate(need(!is.null(doc), "No alignment XML available"))
@@ -508,6 +564,7 @@ server <- function(input, output, session) {
     }
   )
   
+  # ---- Download search strategy JSON ----
   output$download_strategy <- downloadHandler(
     filename = function() {
       paste0("localignr_search_strategy_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".json")
@@ -533,6 +590,7 @@ server <- function(input, output, session) {
   
   # ---- Build local sequence DB ----
   make_log <- reactiveVal("")
+  
   append_make_log <- function(...) {
     msg <- sprintf(...)
     old <- make_log()
@@ -581,6 +639,7 @@ server <- function(input, output, session) {
     logf("[META] Metadata cache cleared after DB registration")
   })
   
+  # ---- Load search strategy from JSON ----
   observeEvent(input$upload_strategy, {
     req(
       is.list(input$upload_strategy),
