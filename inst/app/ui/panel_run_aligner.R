@@ -100,16 +100,25 @@ panel_run_aligner <- function() {
         
         fluidRow(
           column(
-            width = 4,
+            width = 6,
             downloadButton("download_report", "HTML report")
           ),
           column(
-            width = 4,
+            width = 6,
             downloadButton("download_xml", "XML")
+          )
+        ),
+        
+        br(),
+        
+        fluidRow(
+          column(
+            width = 6,
+            downloadButton("download_strategy", "Search strategy")
           ),
           column(
-            width = 4,
-            downloadButton("download_strategy", "Search strategy")
+            width = 6,
+            downloadButton("download_job_report", "Job report")
           )
         ),
         

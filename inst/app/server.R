@@ -27,6 +27,8 @@ source("R/07_aligner_dispatch.R")
 source("R/08_aligner_params.R")
 source("R/09_search_strategy.R")
 source("R/10_user_preferences.R")
+source("R/11_job_report.R")
+
 source("R/90_diagnostics.R", local = TRUE)
 
 server <- function(input, output, session) {
@@ -587,6 +589,49 @@ server <- function(input, output, session) {
       write_search_strategy(strategy, file)
     }
   )
+  
+  # ---- Download job report ----
+  output$download_job_report <- downloadHandler(
+    
+    filename = function() {
+      paste0(
+        "localignr_job_",
+        format(Sys.time(), "%Y%m%d_%H%M%S"),
+        ".yml"
+      )
+    },
+    
+    content = function(file) {
+      
+      req(xml_current())
+      
+      params <- collect_aligner_params(
+        input,
+        aligner = toupper(input$aligner),
+        program = input$program
+      )
+      
+      reg <- db_registry()
+      
+      db_row <- reg[
+        reg$name == input$db,
+        ,
+        drop = FALSE
+      ]
+      
+      report <- build_job_report(
+        input = input,
+        registry_entry = if (nrow(db_row))
+          as.list(db_row[1, ])
+        else list(),
+        results_df = parsedresults(),
+        params = params
+      )
+      
+      yaml::write_yaml(report, file)
+    }
+  )
+  
   
   # ---- Build local sequence DB ----
   make_log <- reactiveVal("")
