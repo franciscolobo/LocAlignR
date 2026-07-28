@@ -101,18 +101,51 @@ require_continue() {
   ask_yes_no "$msg" || exit 0
 }
 
-dl_file() {
-  # args: url, outpath
-  local url="$1"
-  local out="$2"
+#dl_file() {
+#  # args: url, outpath
+#  local url="$1"
+#  local out="$2"
+#
+#  if [[ "$url" == file://* ]]; then
+#    local src="${url#file://}"
+#    [[ -f "$src" ]] || die "Local file not found: $src"
+#    cp -f "$src" "$out"
+#  else
+#    curl -fL "$url" -o "$out" || die "Download failed: $url"
+#  fi
+#}
 
-  if [[ "$url" == file://* ]]; then
-    local src="${url#file://}"
-    [[ -f "$src" ]] || die "Local file not found: $src"
-    cp -f "$src" "$out"
-  else
-    curl -fL "$url" -o "$out" || die "Download failed: $url"
-  fi
+download_file() {
+    local url="$1"
+    local output_file="$2"
+    local curl_command
+
+    # On macOS, prefer the system curl because it uses the macOS certificate
+    # trust store. Conda's OpenSSL-based curl may fail on institutional networks
+    # that insert a locally trusted certificate into the HTTPS chain.
+    if [[ "$(uname -s)" == "Darwin" && -x "/usr/bin/curl" ]]; then
+        curl_command="/usr/bin/curl"
+    elif command -v curl >/dev/null 2>&1; then
+        curl_command="$(command -v curl)"
+    else
+        echo "ERROR: curl is required but was not found." >&2
+        return 1
+    fi
+
+    echo "  Fetching: $(basename "$output_file")"
+
+    if ! "$curl_command" \
+        --fail \
+        --location \
+        --show-error \
+        --progress-bar \
+        --output "$output_file" \
+        "$url"
+    then
+        echo "ERROR: Download failed: $url" >&2
+        rm -f "$output_file"
+        return 1
+    fi
 }
 
 verify_sha256() {
@@ -154,42 +187,97 @@ manifest_get_db_json() {
 }
 
 yaml_upsert_db() {
-  # args: name, path, type, backend
+  # Arguments:
+  #   1. Registry entry name
+  #   2. Formatted database path
+  #   3. Database type: prot or nucl
+  #   4. Backend: blast or diamond
+  #   5. Metadata TSV path, or an empty string
+  #   6. Display title
+  #   7. Source/provider
+  #   8. Database version
+
   local nm="$1"
   local pth="$2"
   local tp="$3"
-  local backend="${4:-blast}"
+  local backend="$4"
+  local metadata_path="${5:-}"
+  local title="${6:-$nm}"
+  local source="${7:-curated}"
+  local version="${8:-}"
 
   mkdir -p "$USER_CFG_DIR"
 
   "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
-    suppressPackageStartupMessages({library(yaml)})
-    yml <- commandArgs(TRUE)[1]
-    nm  <- commandArgs(TRUE)[2]
-    pth <- commandArgs(TRUE)[3]
-    tp  <- commandArgs(TRUE)[4]
-    backend <- commandArgs(TRUE)[5]
+    suppressPackageStartupMessages(library(yaml))
+
+    args <- commandArgs(TRUE)
+
+    yml           <- args[[1]]
+    nm            <- args[[2]]
+    pth           <- args[[3]]
+    tp            <- args[[4]]
+    backend       <- args[[5]]
+    metadata_path <- args[[6]]
+    title         <- args[[7]]
+    source        <- args[[8]]
+    version       <- args[[9]]
 
     x <- list()
+
     if (file.exists(yml)) {
-      x <- tryCatch(read_yaml(yml), error = function(e) list())
-      if (is.null(x)) x <- list()
+      x <- tryCatch(
+        read_yaml(yml),
+        error = function(e) list()
+      )
+
+      if (is.null(x)) {
+        x <- list()
+      }
     }
 
+    has_metadata <- (
+      nzchar(metadata_path) &&
+      file.exists(metadata_path)
+    )
+
     x[[nm]] <- list(
+      name = nm,
       path = pth,
       type = tp,
-      backend = backend
+      backend = backend,
+      title = title,
+      source = source,
+      version = version,
+      metadata_path = if (has_metadata) metadata_path else NULL,
+      has_metadata = has_metadata
     )
 
     tmp <- paste0(yml, ".tmp")
+
     write_yaml(x, tmp)
-    file.rename(tmp, yml)
-  ' "$USER_DB_YML" "$nm" "$pth" "$tp" "$backend"
+
+    if (!file.rename(tmp, yml)) {
+      stop("Failed to replace registry file: ", yml)
+    }
+  ' \
+    "$USER_DB_YML" \
+    "$nm" \
+    "$pth" \
+    "$tp" \
+    "$backend" \
+    "$metadata_path" \
+    "$title" \
+    "$source" \
+    "$version"
 }
 
 download_format_and_register_db() {
-  # args: db_id, display_name, db_dir
+  # Arguments:
+  #   1. Database ID
+  #   2. Display name
+  #   3. Parent installation directory
+
   local db_id="$1"
   local display_name="$2"
   local db_dir="$3"
@@ -198,79 +286,384 @@ download_format_and_register_db() {
   say "Processing: $display_name"
 
   local db_json
-  db_json="$(manifest_get_db_json "$db_id")" || die "Failed to read manifest entry: $db_id"
+  db_json="$(manifest_get_db_json "$db_id")" ||
+    die "Failed to read manifest entry: $db_id"
 
-  local file_tsv
-  file_tsv="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
-    d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
-    f <- d$files
-    cat(paste(f$filename, f$url, f$sha256, sep = "\t"), sep = "\n")
-  ' "$db_json")"
-  [[ -n "$file_tsv" ]] || die "No files found in manifest for: $db_id"
+  # --------------------------------------------------------------------------
+  # Read general database information
+  # --------------------------------------------------------------------------
 
   local molecule
-  molecule="$("$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
-    d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
-    cat(d$molecule)
-  ' "$db_json")"
-  [[ -n "$molecule" ]] || die "Missing molecule type in manifest for: $db_id"
+  molecule="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+      if (is.null(d$molecule) || !nzchar(d$molecule)) {
+        quit(status = 2)
+      }
+      cat(d$molecule)
+    ' "$db_json"
+  )" || die "Missing molecule type for database: $db_id"
 
+  local db_version
+  db_version="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+      if (!is.null(d$version)) {
+        cat(d$version)
+      }
+    ' "$db_json"
+  )"
+
+  local db_source
+  db_source="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+      if (!is.null(d$source)) {
+        cat(d$source)
+      } else {
+        cat("curated")
+      }
+    ' "$db_json"
+  )"
+
+  # --------------------------------------------------------------------------
+  # Read downloadable files
+  # --------------------------------------------------------------------------
+
+  local file_tsv
+  file_tsv="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(
+        commandArgs(TRUE)[1],
+        simplifyVector = FALSE
+      )
+
+      if (is.null(d$files) || length(d$files) == 0) {
+        quit(status = 2)
+      }
+
+      for (f in d$files) {
+        kind <- if (is.null(f$kind)) "" else f$kind
+
+        cat(
+          kind,
+          f$filename,
+          f$url,
+          f$sha256,
+          sep = "\t"
+        )
+        cat("\n")
+      }
+    ' "$db_json"
+  )" || die "Could not read downloadable files for: $db_id"
+
+  [[ -n "$file_tsv" ]] ||
+    die "No downloadable files found for: $db_id"
+
+  # Each curated database gets its own directory.
   local db_subdir="${db_dir%/}/${db_id}"
   mkdir -p "$db_subdir"
 
-  while IFS=$'\t' read -r fn url sha; do
-    [[ -n "$fn" && -n "$url" && -n "$sha" ]] || die "Malformed file entry for $db_id"
+  # Download all declared files.
+  while IFS=$'\t' read -r kind fn url sha; do
+    [[ -n "$fn" && -n "$url" && -n "$sha" ]] ||
+      die "Malformed file entry for database: $db_id"
+
     local out="${db_subdir}/${fn}"
-    say "  Fetching: $fn"
-    dl_file "$url" "$out"
+
+    download_file "$url" "$out" ||
+      die "Download failed: $url"
+
     verify_sha256 "$out" "$sha"
+    say "  Verified SHA256: $fn"
+
   done <<< "$file_tsv"
 
-  local gzip_file
-  gzip_file="$(printf '%s\n' "$file_tsv" | head -n1 | cut -f1)"
-  local in_gz="${db_subdir}/${gzip_file}"
-  [[ -f "$in_gz" ]] || die "Expected file missing: $in_gz"
+  # --------------------------------------------------------------------------
+  # Read extraction instructions
+  # --------------------------------------------------------------------------
 
-  local fasta_out="${in_gz%.gz}"
-  say "  Extracting: $(basename "$in_gz") -> $(basename "$fasta_out")"
-  gunzip -c "$in_gz" > "$fasta_out"
-  [[ -f "$fasta_out" ]] || die "Failed to create FASTA: $fasta_out"
-  say "  Saved FASTA: $fasta_out"
+  local extract_type
+  extract_type="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(
+        commandArgs(TRUE)[1],
+        simplifyVector = FALSE
+      )
 
-  local db_base="${db_subdir%/}/${db_id}"
+      x <- d$post_download$extract
 
-  say "  Building BLAST database"
-  if [[ "$molecule" == "protein" ]]; then
-    "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb \
-      -in "$fasta_out" \
-      -dbtype prot \
-      -out "$db_base" \
-      -parse_seqids \
-      || die "makeblastdb failed for $db_id"
+      if (is.null(x) || is.null(x$type)) {
+        cat("none")
+      } else {
+        cat(x$type)
+      }
+    ' "$db_json"
+  )"
 
-    yaml_upsert_db "${db_id}_blast" "$db_base" "prot" "blast"
-  else
-    "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb \
-      -in "$fasta_out" \
-      -dbtype nucl \
-      -out "$db_base" \
-      -parse_seqids \
-      || die "makeblastdb failed for $db_id"
+  local output_files
+  output_files="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(
+        commandArgs(TRUE)[1],
+        simplifyVector = FALSE
+      )
 
-    yaml_upsert_db "${db_id}_blast" "$db_base" "nucl" "blast"
+      outputs <- d$post_download$extract$outputs
+
+      if (!is.null(outputs) && length(outputs) > 0) {
+        for (output in outputs) {
+          cat(output)
+          cat("\n")
+        }
+      }
+    ' "$db_json"
+  )"
+
+  # The current one-file-per-database design expects one downloaded archive.
+  local archive_filename
+  archive_filename="$(
+    printf '%s\n' "$file_tsv" |
+      head -n 1 |
+      cut -f2
+  )"
+
+  local archive_path="${db_subdir}/${archive_filename}"
+
+  [[ -f "$archive_path" ]] ||
+    die "Downloaded archive was not found: $archive_path"
+
+  # --------------------------------------------------------------------------
+  # Extract the archive according to the manifest
+  # --------------------------------------------------------------------------
+
+  case "$extract_type" in
+    tar.gz|tgz)
+      say "  Extracting archive: $archive_filename"
+
+      /usr/bin/tar \
+        -xzf "$archive_path" \
+        -C "$db_subdir" ||
+        die "Failed to extract tar.gz archive: $archive_filename"
+      ;;
+
+    gzip|gz)
+      # A plain .gz file represents one compressed output file rather than
+      # a tar archive.
+      local output_count
+      output_count="$(
+        printf '%s\n' "$output_files" |
+          awk 'NF {n++} END {print n + 0}'
+      )"
+
+      [[ "$output_count" -eq 1 ]] ||
+        die "gzip extraction requires exactly one declared output for $db_id"
+
+      local gzip_output
+      gzip_output="$(
+        printf '%s\n' "$output_files" |
+          awk 'NF {print; exit}'
+      )"
+
+      say "  Extracting gzip file: $archive_filename -> $gzip_output"
+
+      gunzip -c "$archive_path" > "${db_subdir}/${gzip_output}" ||
+        die "Failed to extract gzip file: $archive_filename"
+      ;;
+
+    none|"")
+      say "  No archive extraction requested."
+      ;;
+
+    *)
+      die "Unsupported extraction type '$extract_type' for database: $db_id"
+      ;;
+  esac
+
+  # --------------------------------------------------------------------------
+  # Validate all outputs declared by the manifest
+  # --------------------------------------------------------------------------
+
+  if [[ -n "$output_files" ]]; then
+    while IFS= read -r output_file; do
+      [[ -n "$output_file" ]] || continue
+
+      local output_path="${db_subdir}/${output_file}"
+
+      [[ -f "$output_path" ]] ||
+        die "Expected extracted file is missing: $output_path"
+
+      say "  Extracted: $output_path"
+    done <<< "$output_files"
   fi
-  say "  Registered BLAST DB: ${db_id}_blast"
 
-  if [[ "$molecule" == "protein" ]]; then
-    say "  Building DIAMOND database"
-    "$CONDA_BIN" run -n "$ENV_NAME" diamond makedb \
-      --in "$fasta_out" \
-      --db "$db_base" \
-      || die "diamond makedb failed for $db_id"
+  # --------------------------------------------------------------------------
+  # Read shared registration information
+  # --------------------------------------------------------------------------
 
-    yaml_upsert_db "${db_id}_diamond" "${db_base}.dmnd" "prot" "diamond"
-    say "  Registered DIAMOND DB: ${db_id}_diamond"
+  local register_name
+  register_name="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+
+      value <- d$post_download$register$name
+
+      if (is.null(value) || !nzchar(value)) {
+        value <- d$id
+      }
+
+      cat(value)
+    ' "$db_json"
+  )"
+
+  local register_type
+  register_type="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+
+      value <- d$post_download$register$type
+
+      if (is.null(value) || !nzchar(value)) {
+        value <- if (identical(d$molecule, "protein")) "prot" else "nucl"
+      }
+
+      cat(value)
+    ' "$db_json"
+  )"
+
+  local metadata_relative
+  metadata_relative="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(commandArgs(TRUE)[1])
+
+      value <- d$post_download$register$metadata_path
+
+      if (!is.null(value)) {
+        cat(value)
+      }
+    ' "$db_json"
+  )"
+
+  local metadata_path=""
+
+  if [[ -n "$metadata_relative" ]]; then
+    metadata_path="${db_subdir}/${metadata_relative}"
+
+    [[ -f "$metadata_path" ]] ||
+      die "Metadata file was not found: $metadata_path"
+
+    say "  Metadata: $metadata_path"
   fi
+
+  # BLAST files and the DIAMOND .dmnd file can share this prefix.
+  local db_base="${db_subdir}/${register_name}"
+
+  # --------------------------------------------------------------------------
+  # Read formatting operations
+  #
+  # Output columns:
+  #   tool<TAB>input
+  # --------------------------------------------------------------------------
+
+  local format_tsv
+  format_tsv="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      d <- jsonlite::fromJSON(
+        commandArgs(TRUE)[1],
+        simplifyVector = FALSE
+      )
+
+      formats <- d$post_download$format_options
+
+      if (is.null(formats) || length(formats) == 0) {
+        quit(status = 2)
+      }
+
+      for (f in formats) {
+        input <- if (is.null(f$input)) "" else f$input
+
+        cat(
+          f$tool,
+          input,
+          sep = "\t"
+        )
+        cat("\n")
+      }
+    ' "$db_json"
+  )" || die "No formatting operations were defined for: $db_id"
+
+  # --------------------------------------------------------------------------
+  # Format and register each requested backend
+  # --------------------------------------------------------------------------
+
+  while IFS=$'\t' read -r tool input_relative; do
+    [[ -n "$tool" ]] ||
+      die "A formatting operation is missing its tool for: $db_id"
+
+    [[ -n "$input_relative" ]] ||
+      die "Formatting operation '$tool' is missing its input FASTA"
+
+    local fasta_path="${db_subdir}/${input_relative}"
+
+    [[ -f "$fasta_path" ]] ||
+      die "FASTA input was not found: $fasta_path"
+
+    case "$tool" in
+      makeblastdb)
+        say "  Building BLAST database"
+
+        "$CONDA_BIN" run -n "$ENV_NAME" makeblastdb \
+          -in "$fasta_path" \
+          -dbtype "$register_type" \
+          -out "$db_base" \
+          -parse_seqids ||
+          die "makeblastdb failed for $db_id"
+
+        yaml_upsert_db \
+          "${register_name}_blast" \
+          "$db_base" \
+          "$register_type" \
+          "blast" \
+          "$metadata_path" \
+          "$display_name" \
+          "$db_source" \
+          "$db_version"
+
+        say "  Registered BLAST DB: ${register_name}_blast"
+        ;;
+
+      diamond)
+        [[ "$register_type" == "prot" ]] ||
+          die "DIAMOND databases require protein sequences: $db_id"
+
+        say "  Building DIAMOND database"
+
+        "$CONDA_BIN" run -n "$ENV_NAME" diamond makedb \
+          --in "$fasta_path" \
+          --db "$db_base" ||
+          die "diamond makedb failed for $db_id"
+
+        yaml_upsert_db \
+          "${register_name}_diamond" \
+          "${db_base}.dmnd" \
+          "prot" \
+          "diamond" \
+          "$metadata_path" \
+          "$display_name" \
+          "$db_source" \
+          "$db_version"
+
+        say "  Registered DIAMOND DB: ${register_name}_diamond"
+        ;;
+
+      *)
+        die "Unsupported formatting tool '$tool' for database: $db_id"
+        ;;
+    esac
+
+  done <<< "$format_tsv"
+
+  say "  Completed database installation: $display_name"
 }
 
 create_gui_launcher() {

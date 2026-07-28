@@ -1,4 +1,4 @@
-# R/05_makeblastdb.R
+# R/06_makeblastdb.R
 
 run_makeseqdb_and_register <- function(
     input,

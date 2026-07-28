@@ -1,41 +1,51 @@
 {
   "schema_version": "1.0",
-  "generated_utc": "2026-01-02T00:00:00Z",
+  "generated_utc": "2026-07-28T00:00:00Z",
   "source": {
-    "provider": "local-test",
-    "record_doi": null,
-    "record_version": "dev"
+    "provider": "zenodo",
+    "record_doi": "10.5281/zenodo.21650596",
+    "record_version": "1.0.0"
   },
   "databases": [
     {
-      "id": "local_test_nt",
-      "display_name": "LOCAL TEST (nucleotide) test.fna.gz from /tmp/localign-db",
-      "description": "Local test database for installer development. Uses file:// URL and a tiny FASTA.",
-      "molecule": "nucleotide",
+      "id": "uniprot_sprot",
+      "version": "2026-06-05",
+      "display_name": "UniProtKB/Swiss-Prot",
+      "description": "UniProtKB/Swiss-Prot protein sequence database with associated metadata.",
+      "molecule": "protein",
       "recommended_aligner": "blast",
-      "license": "internal-test",
+      "license": "UniProt License",
       "files": [
         {
-          "kind": "fasta",
-          "filename": "test.fna.gz",
-          "url": "file:///tmp/localign-db/test.fna.gz",
-          "sha256": "804671819e4b5c865ddde770310259a3d24ccffa5e95674be83dda999d395442"
+          "kind": "archive",
+          "filename": "uniprot_sprot_06_05_2026.tar.gz",
+          "url": "https://zenodo.org/records/21650597/files/uniprot_sprot_06_05_2026.tar.gz",
+          "sha256": "40b2ce566fd480d8725f006381b5ebc8f588da3c18e8bbc18536bb5b6e1cd88b"
         }
       ],
       "post_download": {
         "extract": {
-          "type": "gzip",
-          "outputs": ["test.fna"]
+          "type": "tar.gz",
+          "outputs": [
+            "uniprot_sprot_06_05_2026.faa",
+            "uniprot_metadata_06_05_2026.tsv"
+          ]
         },
         "format_options": [
           {
             "tool": "makeblastdb",
-            "register": {
-              "name": "local_test_nt",
-              "type": "nucl"
-            }
+            "input": "uniprot_sprot_06_05_2026.faa"
+          },
+          {
+            "tool": "diamond",
+            "input": "uniprot_sprot_06_05_2026.faa"
           }
-        ]
+        ],
+        "register": {
+          "name": "uniprot_sprot",
+          "type": "prot",
+          "metadata_path": "uniprot_metadata_06_05_2026.tsv"
+        }
       }
     }
   ]

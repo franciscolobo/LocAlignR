@@ -671,7 +671,7 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   observeEvent(input$make_run, {
-    run_makeblastdb_and_register(
+    run_makeseqdb_and_register(
       input = input,
       cfg = cfg,
       db_registry = db_registry,
