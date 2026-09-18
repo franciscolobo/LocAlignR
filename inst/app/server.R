@@ -485,25 +485,39 @@ server <- function(input, output, session) {
     xml_current(xml)
   })
   
-  # ---- Parse alignment XML ----
+   # ---- Parse alignment XML ----
   parsedresults <- reactive({
     x <- xml_current()
     req(!is.null(x))
-    
+
     aligner <- toupper(input$aligner %||% "BLAST")
+
+    shinybusy::show_modal_spinner(
+      spin = "fading-circle",
+      text = "Parsing alignment results..."
+    )
+    on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
+
     out <- parse_aligner_xml_to_df(x, aligner = aligner)
-    
+
     logf("[ALIGNMENT][%s] Parsed %d rows", aligner, nrow(out))
-    
+
     out
   })
-  
+
   # ---- Results table ----
   output$alignmentResults <- renderDT({
     df <- parsedresults()
+
+    shinybusy::show_modal_spinner(
+      spin = "fading-circle",
+      text = "Rendering results table..."
+    )
+    on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
+
     render_alignment_results_dt(df = df, subject_meta = subject_meta())
   })
-  
+ 
   # ---- Clicked row summary ----
   output$clicked <- renderTable({
     sel <- input$alignmentResults_rows_selected
