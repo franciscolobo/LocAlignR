@@ -346,57 +346,53 @@ server <- function(input, output, session) {
   }, ignoreInit = FALSE)
   
   # ---- Run alignment ----
-  blastresults <- eventReactive(input$blast, {
+    blastresults <- eventReactive(input$blast, {
     aligner <- toupper(input$aligner %||% "BLAST")
-    spinner_txt <- if (identical(aligner, "DIAMOND")) "Running DIAMOND..." else "Running BLAST..."
-    
-    shinybusy::show_modal_spinner(spin = "fading-circle", text = spinner_txt)
-    on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
-    
+
     validate_alignment_inputs(input, use_upload = use_upload())
-    
+
     prog <- match.arg(input$program, aligner_program_choices(aligner))
-    
+
     evalue <- suppressWarnings(as.numeric(trimws(input$eval %||% "")))
-    
+
     shiny::validate(
       shiny::need(
         is.finite(evalue) && evalue > 0,
         "Please provide a valid positive e-value, e.g. 1e-5, 0.001, or 1."
       )
     )
-    
+
     params <- collect_aligner_params(
       input = input,
       aligner = aligner,
       program = prog
     )
-    
+
     db_res <- resolve_db_selection(
       db_input = input$db,
       registry = db_registry(),
       program  = prog,
       aligner  = aligner
     )
-    
+
     logf("[RUN] aligner=%s program=%s db=%s evalue=%s", aligner, prog, input$db, evalue)
-    
+
     file_sig <- make_query_signature(input, use_upload = use_upload())
     key <- digest::digest(list(aligner, prog, input$db, evalue, file_sig, params))
-    
+
     if (exists(key, envir = .cache, inherits = FALSE)) {
       xml <- get(key, envir = .cache, inherits = FALSE)
-      
+
       xml_current(xml)
       last_run_signature(current_run_signature())
       save_current_preferences(params)
-      
+
       return(xml)
     }
-    
+
     tmp_fa <- materialize_query_fasta(input, use_upload = use_upload())
     on.exit(tmp_fa$cleanup(), add = TRUE)
-    
+
     xml <- run_aligner_as_xml(
       aligner     = aligner,
       program     = prog,
@@ -406,18 +402,18 @@ server <- function(input, output, session) {
       remote      = db_res$remote,
       params      = params
     )
-    
+
     logf("[RUN] XML returned for aligner=%s program=%s", aligner, prog)
-    
+
     assign(key, xml, envir = .cache)
-    
+
     xml_current(xml)
     last_run_signature(current_run_signature())
     save_current_preferences(params)
-    
+
     xml
   }, ignoreNULL = TRUE)
-  
+ 
   observeEvent(input$blast, {
     invisible(blastresults())
   })

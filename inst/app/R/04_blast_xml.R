@@ -51,7 +51,6 @@ materialize_query_fasta <- function(input, use_upload) {
 
 run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
   max_target_seqs <- as.integer(params$max_target_seqs %||% 10L)
-  max_hsps <- as.integer(params$max_hsps %||% 1L)
   threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
   timeout <- as.integer(params$timeout_sec %||% 1800L)
   max_hsps <- as.integer(params$max_hsps %||% 1L)
@@ -62,44 +61,47 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
   matrix <- params$matrix %||% NULL
   gapopen <- params$gapopen %||% NULL
   gapextend <- params$gapextend %||% NULL
-  
+
+  out_xml <- tempfile(pattern = "blast_", fileext = ".xml")
+
   args <- c(
     "-query", query,
     "-db", db,
     "-evalue", as.character(eval),
     "-outfmt", "5",
+    "-out", out_xml,
     "-max_hsps", as.character(max_hsps),
     "-max_target_seqs", as.character(max_target_seqs)
   )
-  
+
   if (!is.null(word_size) && length(word_size) > 0 && !is.na(word_size)) {
     args <- c(args, "-word_size", as.character(as.integer(word_size)))
   }
-  
+
   if (!is.null(matrix) && length(matrix) > 0 && !is.na(matrix) && nzchar(trimws(as.character(matrix)))) {
     args <- c(args, "-matrix", as.character(matrix))
   }
-  
+
   if (!is.null(gapopen) && length(gapopen) > 0 && !is.na(gapopen)) {
     args <- c(args, "-gapopen", as.character(as.integer(gapopen)))
   }
-  
+
   if (!is.null(gapextend) && length(gapextend) > 0 && !is.na(gapextend)) {
     args <- c(args, "-gapextend", as.character(as.integer(gapextend)))
   }
-  
+
   if (!is.null(culling_limit) && length(culling_limit) > 0 && !is.na(culling_limit)) {
     args <- c(args, "-culling_limit", as.character(as.integer(culling_limit)))
   }
-  
+
   has_best_hit_overhang <- !is.null(best_hit_overhang) &&
     length(best_hit_overhang) > 0 &&
     !is.na(best_hit_overhang)
-  
+
   has_best_hit_score_edge <- !is.null(best_hit_score_edge) &&
     length(best_hit_score_edge) > 0 &&
     !is.na(best_hit_score_edge)
-  
+
   if (xor(has_best_hit_overhang, has_best_hit_score_edge)) {
     shiny::validate(
       shiny::need(
@@ -108,7 +110,7 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
       )
     )
   }
-  
+
   if (has_best_hit_overhang && has_best_hit_score_edge) {
     args <- c(
       args,
@@ -116,24 +118,24 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
       "-best_hit_score_edge", as.character(best_hit_score_edge)
     )
   }
-  
+
   if (isTRUE(remote)) {
     args <- c(args, "-remote")
   } else {
     args <- c(args, "-num_threads", as.character(threads))
   }
-  
+
   prog_path <- LocAlignR::localignr_find_tool(
     prog,
     env_var = paste0("LOCALIGN_", toupper(prog))
   )
-  
+
   message(sprintf("[BLAST] program=%s", prog))
   message(sprintf("[BLAST] executable=%s", prog_path))
   message(sprintf("[BLAST] query=%s", query))
   message(sprintf("[BLAST] db=%s", db))
   message(sprintf("[BLAST] args=%s", paste(shQuote(args), collapse = " ")))
-  
+
   shiny::validate(
     shiny::need(
       nzchar(prog_path),
@@ -145,22 +147,29 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
       )
     )
   )
-  
-  res <- processx::run(
-    prog_path,
-    args,
-    error_on_status = FALSE,
-    timeout = timeout,
-    echo = FALSE
+
+  res <- run_process_with_progress(
+    command       = prog_path,
+    args          = args,
+    timeout_sec   = timeout,
+    progress_text = sprintf("Running %s...", prog)
   )
-  
+
   message(sprintf("[BLAST] exit status=%s", res$status))
-  if (nzchar(res$stdout)) message(sprintf("[BLAST] stdout chars=%d", nchar(res$stdout)))
   if (nzchar(res$stderr)) message(sprintf("[BLAST] stderr=%s", res$stderr))
-  
+  message(sprintf(
+    "[BLAST] out_xml exists=%s size=%s",
+    file.exists(out_xml),
+    if (file.exists(out_xml)) file.size(out_xml) else NA
+  ))
+
   shiny::validate(
     shiny::need(
-      res$status == 0,
+      !isTRUE(res$timed_out),
+      sprintf("BLAST timed out after %d seconds.", timeout)
+    ),
+    shiny::need(
+      !is.na(res$status) && res$status == 0,
       paste0(
         "BLAST failed.\n\nProgram: ", prog,
         "\nExit status: ", res$status,
@@ -168,13 +177,14 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
       )
     ),
     shiny::need(
-      nzchar(res$stdout),
-      paste0("BLAST returned no XML output.\n\nSTDERR:\n", res$stderr)
+      file.exists(out_xml) && file.size(out_xml) > 0,
+      paste0("BLAST produced no XML output.\n\nSTDERR:\n", res$stderr)
     )
   )
-  
-  XML::xmlParse(res$stdout, asText = TRUE, useInternalNodes = TRUE)
+
+  XML::xmlParse(out_xml, useInternalNodes = TRUE)
 }
+
 
 parse_blast_xml_to_df <- function(xml_doc) {
   # Always return a data.frame with these columns, even if there are no hits.

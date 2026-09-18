@@ -18,3 +18,4 @@ conda-bld/
 
 # Databases
 databases/
+test_data/
