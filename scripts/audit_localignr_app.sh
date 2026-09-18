@@ -20,7 +20,7 @@ RUN_UI="$APP/ui/panel_run_aligner.R"
 LOAD_UI="$APP/ui/panel_load_xml.R"
 MAIN_UI="$APP/ui.R"
 
-for f in "$SERVER" "$REG" "$BLAST" "$MAKE" "$DISPATCH" "$BUILD_UI" "$RUN_UI" "$LOAD_UI" "$MAIN_UI"; do
+for f in "$SERVER" "$REG" "$BLAST" "$DIAMOND" "$MAKE" "$DISPATCH" "$BUILD_UI" "$RUN_UI" "$LOAD_UI" "$MAIN_UI"; do
   [[ -f "$f" ]] || fail "Missing file: $f"
 done
 
@@ -111,6 +111,10 @@ do
 done
 say
 
+say "-- DIAMOND helpers --"
+check_def_or_alias "$DIAMOND" "run_diamond_as_xml"
+say
+
 say "-- Dispatcher helpers --"
 for fn in \
   aligner_program_choices \
@@ -122,7 +126,7 @@ done
 say
 
 say "-- DB builder helpers --"
-check_def_or_alias "$MAKE" "run_makeblastdb_and_register"
+check_def_or_alias "$MAKE" "run_makeseqdb_and_register"
 check_ref_fixed "$MAKE" 'make_backend' 'input$make_backend used in builder'
 check_ref_fixed "$MAKE" '.dmnd' 'builder handles DIAMOND .dmnd output'
 check_ref_fixed "$MAKE" 'backend' 'builder writes backend field'
@@ -130,9 +134,10 @@ say
 
 say "-- Server references --"
 check_ref_fixed "$SERVER" 'source("R/02_user_db_registry.R")' 'sources registry helpers'
-check_ref_fixed "$SERVER" 'source("R/04_blast_xml.R")' 'sources blast/xml helpers'
-check_ref_fixed "$SERVER" 'source("R/05_makeblastdb.R")' 'sources db builder'
-check_ref_fixed "$SERVER" 'source("R/07_aligner_dispatch.R")' 'sources dispatcher'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$BLAST")\")" 'sources blast/xml helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$DIAMOND")\")" 'sources diamond/xml helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$MAKE")\")" 'sources db builder'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$DISPATCH")\")" 'sources dispatcher'
 
 check_ref_fixed "$SERVER" 'input$alignmentResults_rows_selected' 'row-click input uses alignmentResults'
 check_ref_fixed "$SERVER" 'input$blast' 'run button id still blast'
@@ -159,8 +164,8 @@ do
   check_ref_fixed "$BUILD_UI" "\"$id\"" "panel_build_db defines $id"
 done
 
-check_regex "$RUN_UI" 'panel_run_(blast|alignment)[[:space:]]*<-[[:space:]]*function[[:space:]]*\(' 'run panel function exists'
-check_ref_fixed "$MAIN_UI" 'panel_run_blast()' 'ui.R mounts run panel'
+check_regex "$RUN_UI" 'panel_run_(blast|alignment|aligner)[[:space:]]*<-[[:space:]]*function[[:space:]]*\(' 'run panel function exists'
+check_ref_fixed "$MAIN_UI" 'panel_run_aligner()' 'ui.R mounts run panel'
 check_ref_fixed "$LOAD_UI" 'blast_xml' 'load panel defines xml input'
 say
 
