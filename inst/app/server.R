@@ -265,20 +265,26 @@ server <- function(input, output, session) {
   
   # ---- Metadata cache ----
   metadata_cache <- new.env(parent = emptyenv())
-  
+
   subject_meta <- reactive({
     req(input$db)
-    
+
     cache_key <- metadata_cache_key(input$db, db_registry())
-    
+
     if (exists(cache_key, envir = metadata_cache, inherits = FALSE)) {
       logf("[META] Using cached metadata for DB: %s", input$db)
       return(get(cache_key, envir = metadata_cache, inherits = FALSE))
     }
-    
+
+    shinybusy::show_modal_spinner(
+      spin = "fading-circle",
+      text = sprintf("Loading metadata for %s...", input$db)
+    )
+    on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
+
     meta <- load_subject_meta_for_db(input$db, db_registry())
     assign(cache_key, meta, envir = metadata_cache)
-    
+
     meta
   })
   
@@ -551,10 +557,16 @@ server <- function(input, output, session) {
     content = function(file) {
       x <- isolate(xml_current())
       validate(need(!is.null(x), "Load or run alignment first."))
-      
+
       df <- isolate(parsedresults())
       validate(need(nrow(df) > 0, "No results to export."))
-      
+
+      shinybusy::show_modal_spinner(
+        spin = "fading-circle",
+        text = "Building HTML report..."
+      )
+      on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
+
       build_and_save_html_report(
         file         = file,
         xml_doc      = x,
@@ -563,7 +575,8 @@ server <- function(input, output, session) {
       )
     }
   )
-  
+
+ 
   # ---- Download raw alignment XML ----
   output$download_xml <- downloadHandler(
     filename = function() {
@@ -575,7 +588,8 @@ server <- function(input, output, session) {
       saveXML(doc, file = file)
     }
   )
-  
+ 
+ 
   # ---- Download search strategy JSON ----
   output$download_strategy <- downloadHandler(
     filename = function() {
@@ -584,25 +598,25 @@ server <- function(input, output, session) {
     content = function(file) {
       aligner <- toupper(input$aligner %||% "BLAST")
       program <- input$program %||% NULL
-      
+
       params <- collect_aligner_params(
         input = input,
         aligner = aligner,
         program = program
       )
-      
+
       strategy <- build_search_strategy(
         input = input,
         params = params
       )
-      
+
       write_search_strategy(strategy, file)
     }
-  )
-  
+  ) 
+ 
   # ---- Download job report ----
   output$download_job_report <- downloadHandler(
-    
+
     filename = function() {
       paste0(
         "localignr_job_",
@@ -610,25 +624,31 @@ server <- function(input, output, session) {
         ".yml"
       )
     },
-    
+
     content = function(file) {
-      
+
       req(xml_current())
-      
+
+      shinybusy::show_modal_spinner(
+        spin = "fading-circle",
+        text = "Building job report..."
+      )
+      on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
+
       params <- collect_aligner_params(
         input,
         aligner = toupper(input$aligner),
         program = input$program
       )
-      
+
       reg <- db_registry()
-      
+
       db_row <- reg[
         reg$name == input$db,
         ,
         drop = FALSE
       ]
-      
+
       report <- build_job_report(
         input = input,
         registry_entry = if (nrow(db_row))
@@ -637,12 +657,11 @@ server <- function(input, output, session) {
         results_df = parsedresults(),
         params = params
       )
-      
+
       yaml::write_yaml(report, file)
     }
-  )
-  
-  
+  ) 
+ 
   # ---- Build local sequence DB ----
   make_log <- reactiveVal("")
   
