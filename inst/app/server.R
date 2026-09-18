@@ -12,6 +12,7 @@ library(digest)
 library(htmltools)
 library(htmlwidgets)
 library(shinyFiles)
+library(openxlsx)
 
 app_root <- normalizePath(".", winslash = "/", mustWork = TRUE)
 
@@ -661,7 +662,34 @@ server <- function(input, output, session) {
       yaml::write_yaml(report, file)
     }
   ) 
- 
+
+  # ---- Download Excel spreadsheet ----
+  output$download_xlsx <- downloadHandler(
+    filename = function() {
+      paste0("align_results_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".xlsx")
+    },
+    content = function(file) {
+      x <- isolate(xml_current())
+      validate(need(!is.null(x), "Load or run alignment first."))
+
+      df <- isolate(parsedresults())
+      validate(need(nrow(df) > 0, "No results to export."))
+
+      shinybusy::show_modal_spinner(
+        spin = "fading-circle",
+        text = "Building Excel spreadsheet..."
+      )
+      on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
+
+      build_and_save_alignment_xlsx_report(
+        file         = file,
+        xml_doc      = x,
+        df           = df,
+        subject_meta = subject_meta()
+      )
+    }
+  )
+
   # ---- Build local sequence DB ----
   make_log <- reactiveVal("")
   

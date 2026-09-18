@@ -97,7 +97,7 @@ panel_run_aligner <- function() {
         br(),
         
         tags$h5("Downloads"),
-        
+      
         fluidRow(
           column(
             width = 6,
@@ -108,9 +108,9 @@ panel_run_aligner <- function() {
             downloadButton("download_xml", "XML")
           )
         ),
-        
+
         br(),
-        
+
         fluidRow(
           column(
             width = 6,
@@ -121,11 +121,20 @@ panel_run_aligner <- function() {
             downloadButton("download_job_report", "Job report")
           )
         ),
-        
+
         br(),
-        
+
+        fluidRow(
+          column(
+            width = 6,
+            downloadButton("download_xlsx", "Excel spreadsheet")
+          )
+        ),
+
+        br(),
+
         tags$h5("Load strategy"),
-        
+         
         fileInput(
           "upload_strategy",
           label = NULL,

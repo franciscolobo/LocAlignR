@@ -899,7 +899,7 @@ Continue?"
 # Also ensure correct channel ordering for solvability (conda-forge first is typical for R stacks).
 "$CONDA_BIN" create -y -n "$ENV_NAME" \
   --override-channels -c "$CF" -c "$BC" -c "$MYCHAN" \
-  "$PKG" r-jsonlite r-yaml || die "Conda environment creation/install failed."
+  "$PKG" r-jsonlite r-yaml r-openxlsx || die "Conda environment creation/install failed."
 
 say "Installed ${PKG} in environment ${ENV_NAME}"
 

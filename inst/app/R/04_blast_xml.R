@@ -508,3 +508,88 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
 
 # Backward compatibility
 build_and_save_html_report <- build_and_save_alignment_html_report
+
+#' Build and save the alignment results table as a formatted Excel workbook.
+#'
+#' Mirrors build_and_save_alignment_html_report()'s data assembly (same
+#' metadata join via canon_id, same alignment-block reuse via align_strings()),
+#' but writes a self-contained .xlsx instead of an HTML widget: core hit
+#' columns, joined subject metadata columns, and a monospaced Alignment column
+#' per row.
+build_and_save_alignment_xlsx_report <- function(file, xml_doc, df, subject_meta) {
+  df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
+  meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
+  merged    <- suppressMessages(dplyr::left_join(df_join, meta_join, by = ".join"))
+
+  right_cols <- setdiff(names(merged), names(df_join))
+  meta_cols  <- setdiff(right_cols, c("id", ".join"))
+
+  al_vec <- align_strings(xml_doc, width = 60)
+  if (length(al_vec) != nrow(df)) {
+    length(al_vec) <- nrow(df)
+    al_vec[is.na(al_vec)] <- ""
+  }
+
+  out <- df %>%
+    dplyr::mutate(
+      hsp_q_begin    = suppressWarnings(as.integer(hsp_q_begin)),
+      hsp_q_end      = suppressWarnings(as.integer(hsp_q_end)),
+      hit_length     = suppressWarnings(as.integer(hit_length)),
+      query_fraction = suppressWarnings(as.numeric(query_fraction)),
+      pct_cov        = round(query_fraction * 100, 2),
+      bitscore       = suppressWarnings(as.numeric(bitscore)),
+      eval           = suppressWarnings(as.numeric(eval))
+    )
+
+  core_cols <- c(
+    query_ID    = "Query ID",
+    hit_ID      = "Hit ID",
+    hsp_q_begin = "Query begin",
+    hsp_q_end   = "Query end",
+    hit_length  = "Hit length",
+    pct_cov     = "%cov",
+    bitscore    = "Bit Score",
+    eval        = "e-value"
+  )
+
+  out <- out[names(core_cols)]
+  names(out) <- unname(core_cols)
+
+  if (length(meta_cols)) {
+    meta_block <- merged[meta_cols]
+    names(meta_block) <- meta_cols
+    out <- cbind(out, meta_block)
+  }
+
+  out$Alignment <- al_vec
+
+  wb <- openxlsx::createWorkbook()
+  openxlsx::addWorksheet(wb, "Alignment results")
+
+  openxlsx::writeDataTable(
+    wb, "Alignment results",
+    x = out,
+    tableStyle = "TableStyleLight9",
+    withFilter = TRUE
+  )
+
+  align_col <- which(names(out) == "Alignment")
+
+  openxlsx::addStyle(
+    wb, "Alignment results",
+    style = openxlsx::createStyle(fontName = "Courier New", wrapText = TRUE, valign = "top"),
+    rows = seq_len(nrow(out)) + 1,
+    cols = align_col,
+    gridExpand = TRUE
+  )
+
+  non_align_cols <- setdiff(seq_len(ncol(out)), align_col)
+  openxlsx::setColWidths(wb, "Alignment results", cols = non_align_cols, widths = "auto")
+  openxlsx::setColWidths(wb, "Alignment results", cols = align_col, widths = 80)
+
+  openxlsx::freezePane(wb, "Alignment results", firstRow = TRUE)
+
+  openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
+}
+
+

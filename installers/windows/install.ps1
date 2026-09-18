@@ -103,6 +103,7 @@ function Install-Dependencies([string]$frontend) {
     "r-devtools",
     "r-shiny",
     "r-rappdirs",
+    "r-openxlsx",
     "blast",
     "diamond"
   )

@@ -133,7 +133,8 @@ if (Sys.getenv("LOCALIGN_SKIP_RENV", unset = "0") != "1") {
 required_pkgs <- c(
   "shiny", "shinythemes", "DT", "shinyFiles",
   "shinybusy", "XML", "plyr", "dplyr",
-  "yaml", "processx", "digest", "htmltools", "htmlwidgets"
+  "yaml", "processx", "digest", "htmltools", "htmlwidgets",
+  "openxlsx"
 )
 check_r_packages(required_pkgs)
 
