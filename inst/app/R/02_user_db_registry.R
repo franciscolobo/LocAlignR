@@ -317,7 +317,7 @@ allowed_db_choices_for_program <- function(reg, program, aligner = "BLAST") {
 
 resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST") {
   aligner <- toupper(aligner %||% "BLAST")
-  
+
   if (identical(aligner, "BLAST") && db_input %in% c("nr", "nt")) {
     db_type <- if (identical(db_input, "nt")) "nucl" else "prot"
     return(list(
@@ -327,20 +327,26 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
       backend = "blast"
     ))
   }
-  
+
   row <- registry[match(db_input, registry$name), , drop = FALSE]
-  
+
   shiny::validate(
-    shiny::need(nrow(row) == 1 && nzchar(row$path), paste("Unknown DB:", db_input))
+    shiny::need(
+      isTRUE(db_input %in% registry$name) &&
+        nrow(row) == 1 &&
+        !is.na(row$path) &&
+        nzchar(row$path),
+      paste("Unknown DB:", db_input)
+    )
   )
-  
+
   db <- row$path[1]
   db_type <- row$type[1]
   backend <- tolower(row$backend[1] %||% "blast")
-  
+
   shiny::validate(
     shiny::need(
-      !(identical(aligner, "DIAMOND") && backend != "diamond"),
+      !(identical(aligner, "DIAMOND") && backend != "blast"),
       "Selected database is not registered for DIAMOND."
     ),
     shiny::need(
@@ -356,7 +362,7 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
       "Program needs a protein DB."
     )
   )
-  
+
   list(
     db_path = db,
     db_type = db_type,
@@ -364,3 +370,4 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
     backend = backend
   )
 }
+
