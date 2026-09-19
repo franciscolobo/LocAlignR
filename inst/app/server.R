@@ -32,6 +32,7 @@ source("R/11_user_preferences.R")
 source("R/12_job_report.R")
 
 source("R/90_diagnostics.R", local = TRUE)
+source("R/91_databases.R", local = TRUE)
 
 server <- function(input, output, session) {
   session$onSessionEnded(function() stopApp())
@@ -144,9 +145,24 @@ server <- function(input, output, session) {
   
   db_registry <- reactiveVal(reg0)
 
+  allowed_db_choices <- function(program, aligner = NULL) {
+    reg <- db_registry()
+    aligner <- toupper(aligner %||% "BLAST")
+    allowed_db_choices_for_program(reg, program, aligner)
+  }
+
   # ---- Diagnostics ----
   wire_diagnostics(input, output, db_registry = db_registry)
 
+  # ---- Databases tab ----
+  wire_databases(
+    input = input,
+    output = output,
+    session = session,
+    db_registry = db_registry,
+    cfg = cfg,
+    allowed_db_choices = allowed_db_choices
+  )
  
   # Search strategy import is applied asynchronously after dynamic UI updates.
   pending_strategy <- reactiveVal(NULL)

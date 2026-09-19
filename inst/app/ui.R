@@ -10,6 +10,7 @@ source("ui/panel_run_aligner.R", local = FALSE)
 source("ui/panel_load_xml.R", local = FALSE)
 source("ui/panel_build_db.R", local = FALSE)
 source("ui/diagnostics_tab.R", local = FALSE)
+source("ui/databases_tab.R", local = FALSE)
 source("ui/main_tabs.R", local = FALSE)
 
 options(shiny.maxRequestSize = 2048^3)  # allow large FASTA uploads

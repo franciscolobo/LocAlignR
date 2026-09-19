@@ -1,6 +1,7 @@
 # app/ui/main_tabs.R
 
 source("ui/diagnostics_tab.R", local = FALSE)
+source("ui/databases_tab.R", local = FALSE)
 
 main_tabs <- function() {
   tabsetPanel(
@@ -20,6 +21,8 @@ main_tabs <- function() {
       h4("DB build log"),
       verbatimTextOutput("make_log")
     ),
+
+    databases_tab,
     diagnostics_tab
   )
 }
