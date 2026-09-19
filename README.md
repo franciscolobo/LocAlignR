@@ -17,12 +17,8 @@ LocAlignR was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BL
 - Shiny-based interactive interface
 - Live progress feedback during alignment runs, XML parsing, and results rendering, so long-running jobs on large queries or databases never appear to hang
 - Support for custom, user-built databases
-- Export alignment results as:
-  - Interactive HTML report
-  - Formatted Excel spreadsheet
-  - Raw XML
-  - Reusable search strategy (JSON)
-  - Job report (YAML)
+- Export full alignment results as an interactive HTML report, a formatted Excel spreadsheet, or raw XML
+- Save and reload search configurations (JSON), and export job summary reports (YAML)
 - Fully offline operation after installation
 - Cross-platform: Linux, macOS, and Windows
 - Conda-based installation for external tools
