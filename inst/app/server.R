@@ -210,7 +210,9 @@ server <- function(input, output, session) {
   # ---- Keep database choices synchronized with selected program + aligner ----
   observeEvent(list(input$program, input$aligner), {
     req(input$program)
-    
+    cat("[debug DB-sync] program=", input$program, " aligner=", input$aligner, "\n")   # <-- ADD THIS LINE
+  
+  
     aligner <- toupper(input$aligner %||% "BLAST")
     choices <- unique(allowed_db_choices(input$program, aligner))
     
