@@ -15,7 +15,6 @@ LocAlignR was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BL
   - BLAST+ (nucleotide and protein)
   - DIAMOND (fast protein alignments)
 - Shiny-based interactive interface
-- Live progress feedback during alignment runs, XML parsing, and results rendering, so long-running jobs on large queries or databases never appear to hang
 - Support for custom, user-built databases
 - Export full alignment results as an interactive HTML report, a formatted Excel spreadsheet, or raw XML
 - Save and reload search configurations (JSON), and export job summary reports (YAML)
@@ -130,11 +129,6 @@ mind since they are not interchangeable:
 | --- | --- |
 | Search strategy | JSON file capturing only the aligner, program, database, e-value, preset, and parameters used — no results. Intended to be reloaded via "Load strategy" to repeat the exact same search later, or to share a search setup with collaborators |
 | Job report | YAML file recording the search configuration, the database used, and a brief summary (hit count, top hit, top bit score, top e-value) — not the full hit table. Useful for keeping a record of what was run and its headline outcome, alongside one of the full-results exports above |
-
-For large queries or databases, alignment runs and result loading show live
-progress feedback (an estimated progress bar while the aligner runs, and
-status indicators while results are parsed and rendered) so the interface
-remains informative rather than appearing frozen.
 
 ---
 
