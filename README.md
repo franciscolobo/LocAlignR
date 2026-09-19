@@ -115,16 +115,25 @@ Downloaded databases can be reused across sessions and configured once.
 Once an alignment run completes, results are shown in an interactive, filterable
 table, with per-hit metadata (when available) and alignment detail on row click.
 
-The results table can also be exported in several formats from the **Downloads**
-section of the run panel:
+Several export options are available from the **Downloads** section of the run
+panel. These fall into two distinct categories — full alignment results, and
+records of how a search was configured/run — which is important to keep in
+mind since they are not interchangeable:
+
+**Full alignment results** (every hit, with sequences/coordinates):
 
 | Format | Contents |
 | --- | --- |
 | HTML report | Self-contained, interactive results table with hover tooltips showing metadata and full alignments |
-| Excel spreadsheet | Formatted `.xlsx` workbook with results, joined metadata columns, and per-hit alignment text |
+| Excel spreadsheet | Formatted `.xlsx` workbook with all hits, joined metadata columns, and per-hit alignment text |
 | XML | Raw BLAST/DIAMOND XML output, for reuse in other tools or pipelines |
-| Search strategy | JSON file capturing aligner, program, database, e-value, and parameters, for re-running the same search later or sharing it with collaborators |
-| Job report | YAML summary of the run configuration and top hit, useful for record-keeping |
+
+**Search configuration and run records** (no hit-level data):
+
+| Format | Contents |
+| --- | --- |
+| Search strategy | JSON file capturing only the aligner, program, database, e-value, preset, and parameters used — no results. Intended to be reloaded via "Load strategy" to repeat the exact same search later, or to share a search setup with collaborators |
+| Job report | YAML file recording the search configuration, the database used, and a brief summary (hit count, top hit, top bit score, top e-value) — not the full hit table. Useful for keeping a record of what was run and its headline outcome, alongside one of the full-results exports above |
 
 For large queries or databases, alignment runs and result loading show live
 progress feedback (an estimated progress bar while the aligner runs, and
