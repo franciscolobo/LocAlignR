@@ -7,11 +7,9 @@
 #' @return None. Starts a Shiny app.
 #' @export
 run_app <- function(launch.browser = TRUE, ...) {
-  log_dir <- path.expand("~/Library/Logs/LocAlignR")
+  log_dir <- LocAlignR::localignr_log_dir()
   dir.create(log_dir, recursive = TRUE, showWarnings = FALSE)
-
-  log_file <- file.path(log_dir, "app_startup.log")
-
+  log_file <- LocAlignR::localignr_log_file()
   log_line <- function(...) {
     msg <- paste0(...)
     cat(

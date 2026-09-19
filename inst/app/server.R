@@ -36,9 +36,6 @@ source("R/90_diagnostics.R", local = TRUE)
 server <- function(input, output, session) {
   session$onSessionEnded(function() stopApp())
   
-  # ---- Diagnostics ----
-  wire_diagnostics(output)
-  
   # ---- Load persisted user preferences once at startup ----
   user_prefs <- load_user_preferences()
   
@@ -146,7 +143,11 @@ server <- function(input, output, session) {
   log_registry_entries(reg0)
   
   db_registry <- reactiveVal(reg0)
-  
+
+  # ---- Diagnostics ----
+  wire_diagnostics(input, output, db_registry = db_registry)
+
+ 
   # Search strategy import is applied asynchronously after dynamic UI updates.
   pending_strategy <- reactiveVal(NULL)
   
