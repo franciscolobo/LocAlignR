@@ -1,4 +1,9 @@
-# R/04_blast_xml.R
+# inst/app/R/04_alignment_results.R
+#
+# Aligner-agnostic result handling: input validation, query materialization,
+# BLAST-XML parsing (used by both BLAST and DIAMOND, since DIAMOND's
+# --outfmt 5 emits the same schema), results-table rendering, alignment
+# display, and report export (HTML + Excel).
 
 validate_alignment_inputs <- function(input, use_upload) {
   if (identical(input$input_mode, "upload")) {
@@ -31,14 +36,14 @@ materialize_query_fasta <- function(input, use_upload) {
   } else {
     tmp <- tempfile(fileext = ".fa")
     q <- trimws(input$query)
-    
+
     # Ensure a FASTA header exists
     if (startsWith(q, ">")) {
       writeLines(q, tmp)
     } else {
       writeLines(paste0(">Query\n", q), tmp)
     }
-    
+
     list(
       path = tmp,
       cleanup = function() {
@@ -48,143 +53,6 @@ materialize_query_fasta <- function(input, use_upload) {
     )
   }
 }
-
-run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
-  max_target_seqs <- as.integer(params$max_target_seqs %||% 10L)
-  threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
-  timeout <- as.integer(params$timeout_sec %||% 1800L)
-  max_hsps <- as.integer(params$max_hsps %||% 1L)
-  culling_limit <- params$culling_limit %||% NULL
-  best_hit_overhang <- params$best_hit_overhang %||% NULL
-  best_hit_score_edge <- params$best_hit_score_edge %||% NULL
-  word_size <- params$word_size %||% NULL
-  matrix <- params$matrix %||% NULL
-  gapopen <- params$gapopen %||% NULL
-  gapextend <- params$gapextend %||% NULL
-
-  out_xml <- tempfile(pattern = "blast_", fileext = ".xml")
-
-  args <- c(
-    "-query", query,
-    "-db", db,
-    "-evalue", as.character(eval),
-    "-outfmt", "5",
-    "-out", out_xml,
-    "-max_hsps", as.character(max_hsps),
-    "-max_target_seqs", as.character(max_target_seqs)
-  )
-
-  if (!is.null(word_size) && length(word_size) > 0 && !is.na(word_size)) {
-    args <- c(args, "-word_size", as.character(as.integer(word_size)))
-  }
-
-  if (!is.null(matrix) && length(matrix) > 0 && !is.na(matrix) && nzchar(trimws(as.character(matrix)))) {
-    args <- c(args, "-matrix", as.character(matrix))
-  }
-
-  if (!is.null(gapopen) && length(gapopen) > 0 && !is.na(gapopen)) {
-    args <- c(args, "-gapopen", as.character(as.integer(gapopen)))
-  }
-
-  if (!is.null(gapextend) && length(gapextend) > 0 && !is.na(gapextend)) {
-    args <- c(args, "-gapextend", as.character(as.integer(gapextend)))
-  }
-
-  if (!is.null(culling_limit) && length(culling_limit) > 0 && !is.na(culling_limit)) {
-    args <- c(args, "-culling_limit", as.character(as.integer(culling_limit)))
-  }
-
-  has_best_hit_overhang <- !is.null(best_hit_overhang) &&
-    length(best_hit_overhang) > 0 &&
-    !is.na(best_hit_overhang)
-
-  has_best_hit_score_edge <- !is.null(best_hit_score_edge) &&
-    length(best_hit_score_edge) > 0 &&
-    !is.na(best_hit_score_edge)
-
-  if (xor(has_best_hit_overhang, has_best_hit_score_edge)) {
-    shiny::validate(
-      shiny::need(
-        FALSE,
-        "BLAST best-hit filtering requires both best-hit overhang and best-hit score edge."
-      )
-    )
-  }
-
-  if (has_best_hit_overhang && has_best_hit_score_edge) {
-    args <- c(
-      args,
-      "-best_hit_overhang", as.character(best_hit_overhang),
-      "-best_hit_score_edge", as.character(best_hit_score_edge)
-    )
-  }
-
-  if (isTRUE(remote)) {
-    args <- c(args, "-remote")
-  } else {
-    args <- c(args, "-num_threads", as.character(threads))
-  }
-
-  prog_path <- LocAlignR::localignr_find_tool(
-    prog,
-    env_var = paste0("LOCALIGN_", toupper(prog))
-  )
-
-  message(sprintf("[BLAST] program=%s", prog))
-  message(sprintf("[BLAST] executable=%s", prog_path))
-  message(sprintf("[BLAST] query=%s", query))
-  message(sprintf("[BLAST] db=%s", db))
-  message(sprintf("[BLAST] args=%s", paste(shQuote(args), collapse = " ")))
-
-  shiny::validate(
-    shiny::need(
-      nzchar(prog_path),
-      paste0(
-        prog,
-        " not found. Activate the conda environment or set ",
-        paste0("LOCALIGN_", toupper(prog)),
-        "."
-      )
-    )
-  )
-
-  res <- run_process_with_progress(
-    command       = prog_path,
-    args          = args,
-    timeout_sec   = timeout,
-    progress_text = sprintf("Running %s...", prog)
-  )
-
-  message(sprintf("[BLAST] exit status=%s", res$status))
-  if (nzchar(res$stderr)) message(sprintf("[BLAST] stderr=%s", res$stderr))
-  message(sprintf(
-    "[BLAST] out_xml exists=%s size=%s",
-    file.exists(out_xml),
-    if (file.exists(out_xml)) file.size(out_xml) else NA
-  ))
-
-  shiny::validate(
-    shiny::need(
-      !isTRUE(res$timed_out),
-      sprintf("BLAST timed out after %d seconds.", timeout)
-    ),
-    shiny::need(
-      !is.na(res$status) && res$status == 0,
-      paste0(
-        "BLAST failed.\n\nProgram: ", prog,
-        "\nExit status: ", res$status,
-        "\n\nSTDERR:\n", res$stderr
-      )
-    ),
-    shiny::need(
-      file.exists(out_xml) && file.size(out_xml) > 0,
-      paste0("BLAST produced no XML output.\n\nSTDERR:\n", res$stderr)
-    )
-  )
-
-  XML::xmlParse(out_xml, useInternalNodes = TRUE)
-}
-
 
 parse_blast_xml_to_df <- function(xml_doc) {
   # Always return a data.frame with these columns, even if there are no hits.
@@ -201,32 +69,32 @@ parse_blast_xml_to_df <- function(xml_doc) {
       stringsAsFactors = FALSE
     )
   }
-  
+
   results <- XML::xpathApply(xml_doc, "//Iteration", function(row) {
     query_ID     <- XML::getNodeSet(row, "Iteration_query-def") %>% sapply(XML::xmlValue)
     query_length <- XML::getNodeSet(row, "Iteration_query-len") %>% sapply(XML::xmlValue)
     hit_ID       <- XML::getNodeSet(row, "Iteration_hits//Hit//Hit_id") %>% sapply(XML::xmlValue)
-    
+
     # No hits for this query
     if (!length(hit_ID)) return(NULL)
-    
+
     bitscore    <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_bit-score") %>% sapply(XML::xmlValue)
     eval        <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_evalue") %>% sapply(XML::xmlValue)
     hsp_q_begin <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
     hsp_q_end   <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
-    
+
     # Note: kept identical to current behavior.
     hsp_s_begin <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
     hsp_s_end   <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
-    
+
     eval <- suppressWarnings(as.numeric(eval))
     eval <- signif(eval, digits = 3)
-    
+
     qlen <- suppressWarnings(as.numeric(query_length))
     hit_length <- suppressWarnings(as.numeric(hsp_q_end) - as.numeric(hsp_q_begin) + 1)
-    
+
     qfrac <- ifelse(is.finite(hit_length / qlen), round(hit_length / qlen, 2), NA_real_)
-    
+
     as.data.frame(
       cbind(
         query_ID,
@@ -241,19 +109,19 @@ parse_blast_xml_to_df <- function(xml_doc) {
       stringsAsFactors = FALSE
     )
   })
-  
+
   # Drop NULL entries (Iterations with no hits)
   results <- Filter(Negate(is.null), results)
-  
+
   if (!length(results)) return(empty_df())
-  
+
   out <- plyr::rbind.fill(results)
   if (is.null(out)) empty_df() else out
 }
 
 parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   aligner <- toupper(aligner %||% "BLAST")
-  
+
   switch(
     aligner,
     "BLAST" = parse_blast_xml_to_df(xml_doc),
@@ -265,12 +133,12 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
 .render_blast_results_dt_impl <- function(df, subject_meta) {
   df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
   meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
-  
+
   merged <- suppressMessages(dplyr::left_join(df_join, meta_join, by = ".join"))
-  
+
   right_cols <- setdiff(names(merged), names(df_join))
   meta_cols  <- setdiff(right_cols, c("id", ".join"))
-  
+
   tt <- if (nrow(merged)) {
     vapply(seq_len(nrow(merged)), function(i) {
       if (length(meta_cols)) build_tt_row(merged[i, meta_cols, drop = FALSE]) else "No metadata"
@@ -278,9 +146,9 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   } else {
     character(0)
   }
-  
+
   display <- df
-  
+
   if (length(tt)) {
     display$hit_ID <- sprintf(
       '<span data-toggle="tooltip" data-html="true" title="%s">%s</span>',
@@ -289,7 +157,7 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   } else {
     display$hit_ID <- htmltools::htmlEscape(df$hit_ID)
   }
-  
+
   display <- display |>
     dplyr::mutate(
       hsp_q_begin    = suppressWarnings(as.integer(hsp_q_begin)),
@@ -300,7 +168,7 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
       bitscore       = suppressWarnings(as.numeric(bitscore)),
       eval           = suppressWarnings(signif(as.numeric(eval), digits = 3))
     )
-  
+
   cols <- c(
     query_ID    = "Query ID",
     hsp_q_begin = "Query begin",
@@ -311,9 +179,9 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
     bitscore    = "Bit Score",
     eval        = "e-value"
   )
-  
+
   display <- display[names(cols)]
-  
+
   DT::datatable(
     display,
     colnames = unname(cols),
@@ -342,17 +210,17 @@ render_blast_results_dt <- function(df, subject_meta) {
 render_clicked_summary_table <- function(row, subject_meta) {
   idraw <- as.character(row$hit_ID)
   key   <- canon_id(idraw)
-  
+
   meta_rows <- subject_meta[canon_id(subject_meta$id) == key, , drop = FALSE]
   meta_cols <- setdiff(names(subject_meta), "id")
-  
+
   tt <- if (nrow(meta_rows)) build_tt_row(meta_rows[, meta_cols, drop = FALSE]) else "No metadata"
-  
+
   id_disp <- sprintf(
     '<span data-toggle="tooltip" data-html="true" title="%s">%s</span>',
     tt, htmltools::htmlEscape(idraw)
   )
-  
+
   data.frame(
     Field = c("Query ID", "Hit ID", "Hit begin", "Hit end", "Hit length", "Query aln fraction", "Bit Score", "e-value"),
     Value = c(
@@ -371,32 +239,32 @@ render_clicked_summary_table <- function(row, subject_meta) {
 
 render_alignment_for_row <- function(xml_doc, row_index, width = 40) {
   hsps <- XML::getNodeSet(xml_doc, "//Hsp")
-  
+
   shiny::validate(
     shiny::need(length(hsps) >= row_index, "Selected alignment was not found in the XML.")
   )
-  
+
   hsp <- hsps[[row_index]]
-  
+
   get_text <- function(node, tag) {
     x <- XML::getNodeSet(node, tag)
     if (!length(x)) return("")
     as.character(XML::xmlValue(x[[1]]))
   }
-  
+
   get_int <- function(node, tag) {
     suppressWarnings(as.integer(get_text(node, tag)))
   }
-  
+
   qseq_local <- get_text(hsp, "Hsp_qseq")
   mid_local  <- get_text(hsp, "Hsp_midline")
   hseq_local <- get_text(hsp, "Hsp_hseq")
-  
+
   q_from_local <- get_int(hsp, "Hsp_query-from")
   q_to_local   <- get_int(hsp, "Hsp_query-to")
   h_from_local <- get_int(hsp, "Hsp_hit-from")
   h_to_local   <- get_int(hsp, "Hsp_hit-to")
-  
+
   wrap_alignment_with_coords(
     qseq   = qseq_local,
     mid    = mid_local,
@@ -416,11 +284,11 @@ align_strings <- function(xml_doc, width = 40) {
     bot <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_hseq") %>% sapply(XML::xmlValue)
     rbind(top, mid, bot)
   })
-  
+
   if (!length(al)) return(character())
-  
+
   ax <- do.call("cbind", al)
-  
+
   vapply(seq_len(ncol(ax)), function(i) {
     wrap_alignment(ax[1, i], ax[2, i], ax[3, i], width = width)
   }, character(1))
@@ -430,21 +298,21 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
   df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
   meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
   merged    <- suppressMessages(dplyr::left_join(df_join, meta_join, by = ".join"))
-  
+
   right_cols <- setdiff(names(merged), names(df_join))
   meta_cols  <- setdiff(right_cols, c("id", ".join"))
-  
+
   al_vec <- align_strings(xml_doc, width = 40)
   if (length(al_vec) != nrow(df)) {
     length(al_vec) <- nrow(df)
     al_vec[is.na(al_vec)] <- ""
   }
-  
+
   tip_vec <- vapply(seq_len(nrow(merged)), function(i) {
     meta_txt <- if (length(meta_cols)) build_text_row(merged[i, meta_cols, drop = FALSE]) else "No metadata"
     paste(c("Metadata:", meta_txt, "", "Alignment:", al_vec[i] %||% ""), collapse = "\n")
   }, character(1))
-  
+
   display <- df %>%
     dplyr::mutate(
       hsp_q_begin    = suppressWarnings(as.integer(hsp_q_begin)),
@@ -454,13 +322,13 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
       bitscore       = suppressWarnings(as.numeric(bitscore)),
       eval           = suppressWarnings(as.numeric(eval))
     )
-  
+
   esc_tip <- htmltools::htmlEscape(tip_vec, attribute = TRUE)
   display$hit_ID <- sprintf(
     '<span class="tt" data-tip="%s">%s</span>',
     esc_tip, htmltools::htmlEscape(display$hit_ID)
   )
-  
+
   cols <- c(
     query_ID       = "Query ID",
     hit_ID         = "Hit ID",
@@ -472,7 +340,7 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
     eval           = "e-value"
   )
   display <- display[names(cols)]
-  
+
   widget <- DT::datatable(
     display,
     colnames = unname(cols),
@@ -481,7 +349,7 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
     filter = "top",
     options = list(pageLength = 20, searchHighlight = TRUE)
   ) %>% DT::formatRound("query_fraction", digits = 2)
-  
+
   tooltip_css <- htmltools::tags$style(htmltools::HTML("
     .tt{position:relative; cursor:help;}
     .tt:hover::after{
@@ -501,7 +369,7 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
       border:6px solid transparent; border-bottom-color:#111; transform: translateY(-12px);
     }
   "))
-  
+
   widget <- htmlwidgets::prependContent(widget, tooltip_css)
   htmlwidgets::saveWidget(widget, file, selfcontained = TRUE, title = "Alignment results")
 }
@@ -591,5 +459,3 @@ build_and_save_alignment_xlsx_report <- function(file, xml_doc, df, subject_meta
 
   openxlsx::saveWorkbook(wb, file, overwrite = TRUE)
 }
-
-

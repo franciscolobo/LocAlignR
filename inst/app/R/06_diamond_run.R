@@ -1,4 +1,4 @@
-# inst/app/R/05_diamond_xml.R
+# inst/app/R/06_diamond_run.R
 
 run_diamond_as_xml <- function(mode, query, db, eval, params = list()) {
   mode <- match.arg(mode, c("blastp", "blastx"))

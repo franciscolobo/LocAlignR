@@ -11,16 +11,17 @@ fail() { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 
 SERVER="$APP/server.R"
 REG="$APP/R/02_user_db_registry.R"
-BLAST="$APP/R/04_blast_xml.R"
-DIAMOND="$APP/R/05_diamond_xml.R"
-MAKE="$APP/R/06_makeseqdb.R"
-DISPATCH="$APP/R/07_aligner_dispatch.R"
+RESULTS="$APP/R/04_alignment_results.R"
+BLASTRUN="$APP/R/05_blast_run.R"
+DIAMOND="$APP/R/06_diamond_run.R"
+MAKE="$APP/R/07_makeseqdb.R"
+DISPATCH="$APP/R/08_aligner_dispatch.R"
 BUILD_UI="$APP/ui/panel_build_db.R"
 RUN_UI="$APP/ui/panel_run_aligner.R"
 LOAD_UI="$APP/ui/panel_load_xml.R"
 MAIN_UI="$APP/ui.R"
 
-for f in "$SERVER" "$REG" "$BLAST" "$DIAMOND" "$MAKE" "$DISPATCH" "$BUILD_UI" "$RUN_UI" "$LOAD_UI" "$MAIN_UI"; do
+for f in "$SERVER" "$REG" "$RESULTS" "$BLASTRUN" "$DIAMOND" "$MAKE" "$DISPATCH" "$BUILD_UI" "$RUN_UI" "$LOAD_UI" "$MAIN_UI"; do
   [[ -f "$f" ]] || fail "Missing file: $f"
 done
 
@@ -91,13 +92,12 @@ do
 done
 say
 
-say "-- Alignment / parser helpers --"
+say "-- Alignment / parser helpers (aligner-agnostic) --"
 for fn in \
   validate_alignment_inputs \
   validate_blast_inputs \
   make_query_signature \
   materialize_query_fasta \
-  run_blast_as_xml \
   parse_blast_xml_to_df \
   parse_alignment_xml_to_df \
   render_blast_results_dt \
@@ -105,13 +105,18 @@ for fn in \
   render_clicked_summary_table \
   render_alignment_for_row \
   build_and_save_html_report \
-  build_and_save_alignment_html_report
+  build_and_save_alignment_html_report \
+  build_and_save_alignment_xlsx_report
 do
-  check_def_or_alias "$BLAST" "$fn"
+  check_def_or_alias "$RESULTS" "$fn"
 done
 say
 
-say "-- DIAMOND helpers --"
+say "-- BLAST run helper --"
+check_def_or_alias "$BLASTRUN" "run_blast_as_xml"
+say
+
+say "-- DIAMOND run helper --"
 check_def_or_alias "$DIAMOND" "run_diamond_as_xml"
 say
 
@@ -134,8 +139,9 @@ say
 
 say "-- Server references --"
 check_ref_fixed "$SERVER" 'source("R/02_user_db_registry.R")' 'sources registry helpers'
-check_ref_fixed "$SERVER" "source(\"R/$(basename "$BLAST")\")" 'sources blast/xml helpers'
-check_ref_fixed "$SERVER" "source(\"R/$(basename "$DIAMOND")\")" 'sources diamond/xml helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$RESULTS")\")" 'sources alignment results helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$BLASTRUN")\")" 'sources BLAST run helper'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$DIAMOND")\")" 'sources DIAMOND run helper'
 check_ref_fixed "$SERVER" "source(\"R/$(basename "$MAKE")\")" 'sources db builder'
 check_ref_fixed "$SERVER" "source(\"R/$(basename "$DISPATCH")\")" 'sources dispatcher'
 
