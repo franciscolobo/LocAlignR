@@ -1,11 +1,11 @@
-# LocAlign
+# LocAlignR
 
-**LocAlign** is a local, offline Shiny application for biological sequence alignment.  
+**LocAlignR** is a local, offline Shiny application for biological sequence alignment.  
 It provides a graphical interface to run **BLAST** and **DIAMOND** on your own machine, without uploading data to external servers.
 
-LocAlign is designed for reproducible research, local database usage, and environments where data privacy or limited connectivity are important.
+LocAlignR is designed for reproducible research, local database usage, and environments where data privacy or limited connectivity are important.
 
-LocAlign was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BLAST
+LocAlignR was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BLAST
 
 ---
 
@@ -15,7 +15,14 @@ LocAlign was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BLA
   - BLAST+ (nucleotide and protein)
   - DIAMOND (fast protein alignments)
 - Shiny-based interactive interface
+- Live progress feedback during alignment runs, XML parsing, and results rendering, so long-running jobs on large queries or databases never appear to hang
 - Support for custom, user-built databases
+- Export alignment results as:
+  - Interactive HTML report
+  - Formatted Excel spreadsheet
+  - Raw XML
+  - Reusable search strategy (JSON)
+  - Job report (YAML)
 - Fully offline operation after installation
 - Cross-platform: Linux, macOS, and Windows
 - Conda-based installation for external tools
@@ -40,7 +47,7 @@ The recommended and supported way to install BLAST and DIAMOND is via **conda**.
 
 ### Conda-based installation (recommended)
 
-LocAlign is designed to be installed and run inside a conda environment that provides
+LocAlignR is designed to be installed and run inside a conda environment that provides
 BLAST, DIAMOND, and all required R dependencies.
 
 See:
@@ -51,19 +58,19 @@ for a fully reproducible installation procedure, including exact channel configu
 
 ---
 
-## Running LocAlign
+## Running LocAlignR
 
-After installation, launch LocAlign from R:
+After installation, launch LocAlignR from R:
 
 ```r
-LocAlign::run_app()
+LocAlignR::run_app()
 ```
 
 This will start the Shiny application locally and open it in your browser.
 
 ## Databases
 
-LocAlign does not ship with alignment databases.
+LocAlignR does not ship with alignment databases.
 
 ### User-provided databases
 
@@ -79,7 +86,7 @@ Or consult the documentation in docs/
 
 ### Curated reference databases (optional)
 
-LocAlign also provides access to a small, non-redundant set of curated reference databases with representative homolog sets across major taxonomic groups.
+LocAlignR also provides access to a small, non-redundant set of curated reference databases with representative homolog sets across major taxonomic groups.
 
 These databases are:
 
@@ -103,9 +110,32 @@ Downloaded databases can be reused across sessions and configured once.
 
 ---
 
+## Results and exports
+
+Once an alignment run completes, results are shown in an interactive, filterable
+table, with per-hit metadata (when available) and alignment detail on row click.
+
+The results table can also be exported in several formats from the **Downloads**
+section of the run panel:
+
+| Format | Contents |
+| --- | --- |
+| HTML report | Self-contained, interactive results table with hover tooltips showing metadata and full alignments |
+| Excel spreadsheet | Formatted `.xlsx` workbook with results, joined metadata columns, and per-hit alignment text |
+| XML | Raw BLAST/DIAMOND XML output, for reuse in other tools or pipelines |
+| Search strategy | JSON file capturing aligner, program, database, e-value, and parameters, for re-running the same search later or sharing it with collaborators |
+| Job report | YAML summary of the run configuration and top hit, useful for record-keeping |
+
+For large queries or databases, alignment runs and result loading show live
+progress feedback (an estimated progress bar while the aligner runs, and
+status indicators while results are parsed and rendered) so the interface
+remains informative rather than appearing frozen.
+
+---
+
 ## Configuration
 
-LocAlign uses two levels of configuration:
+LocAlignR uses two levels of configuration:
 
 - **Default, read-only configuration** bundled with the app
 
@@ -129,7 +159,7 @@ The Diagnostics tab reports which tools are detected and which paths are in use.
 
 - A minimal R package wrapper is used to provide:
 
- - LocAlign::run_app()
+ - LocAlignR::run_app()
 
  - versioning
 
@@ -141,7 +171,7 @@ The Diagnostics tab reports which tools are detected and which paths are in use.
 
 ## Project status
 
-LocAlign is under active development.
+LocAlignR is under active development.
 
 Interfaces, workflows, and configuration options may evolve, but releases will be
 tagged and versioned.
@@ -150,17 +180,17 @@ tagged and versioned.
 
 ## Citation
 
-If you use LocAlign in academic work, please cite it using the information in:
+If you use LocAlignR in academic work, please cite it using the information in:
 
 - CITATION.cff (GitHub / general use)
 
-- citation("LocAlign") from within R
+- citation("LocAlignR") from within R
 
 ---
 
 ## License
 
-LocAlign is released under the MIT License.
+LocAlignR is released under the MIT License.
 
 See the LICENSE file for details.
 
