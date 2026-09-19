@@ -1,2 +1,4 @@
 export(run_app)
 export(localignr_find_tool)
+export(localignr_log_dir)
+export(localignr_log_file)

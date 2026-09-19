@@ -167,9 +167,6 @@ server <- function(input, output, session) {
   # Search strategy import is applied asynchronously after dynamic UI updates.
   pending_strategy <- reactiveVal(NULL)
   
-  # Restore user parameters from last section
-  restoring_preferences <- reactiveVal(FALSE)
-  
   allowed_db_choices <- function(program, aligner = NULL) {
     reg <- db_registry()
     aligner <- toupper(aligner %||% "BLAST")
@@ -309,11 +306,10 @@ server <- function(input, output, session) {
   
   # ---- Alignment XML cache and current result state ----
   .cache <- new.env(parent = emptyenv())
-  
+ 
   xml_current <- reactiveVal(NULL)
   last_run_signature <- reactiveVal(NULL)
-  
-  restored_param_values <- reactiveVal(list())
+ 
   
   current_run_signature <- reactive({
     list(

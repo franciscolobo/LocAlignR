@@ -25,6 +25,7 @@ Imports:
     processx,
     digest,
     htmltools,
-    htmlwidgets
+    htmlwidgets,
+    openxlsx
 Suggests:
     pkgload

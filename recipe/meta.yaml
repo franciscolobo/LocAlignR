@@ -31,6 +31,7 @@ requirements:
     - r-digest
     - r-htmltools
     - r-htmlwidgets
+    - r-openxlsx
   run:
     - r-base >=4.2.0
     - r-shiny
@@ -47,6 +48,7 @@ requirements:
     - r-digest
     - r-htmltools
     - r-htmlwidgets
+    - r-openxlsx
     - blast >=2.12.0
     - diamond >=2.0.0
 

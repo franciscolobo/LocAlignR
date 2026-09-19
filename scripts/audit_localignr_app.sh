@@ -18,6 +18,10 @@ MAKE="$APP/R/07_makeseqdb.R"
 DISPATCH="$APP/R/08_aligner_dispatch.R"
 DIAG="$APP/R/90_diagnostics.R"
 DBTAB="$APP/R/91_databases.R"
+PARAMS="$APP/R/09_aligner_params.R"
+STRATEGY="$APP/R/10_search_strategy.R"
+USERPREFS="$APP/R/11_user_preferences.R"
+JOBREPORT="$APP/R/12_job_report.R"
 BUILD_UI="$APP/ui/panel_build_db.R"
 RUN_UI="$APP/ui/panel_run_aligner.R"
 LOAD_UI="$APP/ui/panel_load_xml.R"
@@ -28,7 +32,8 @@ MAIN_UI="$APP/ui.R"
 LOG_DIR_R="$ROOT/R/log_dir.R"
 
 for f in "$SERVER" "$REG" "$RESULTS" "$BLASTRUN" "$DIAMOND" "$MAKE" "$DISPATCH" \
-         "$DIAG" "$DBTAB" "$BUILD_UI" "$RUN_UI" "$LOAD_UI" "$TABS_UI" \
+         "$DIAG" "$DBTAB" "$PARAMS" "$STRATEGY" "$USERPREFS" "$JOBREPORT" \
+         "$BUILD_UI" "$RUN_UI" "$LOAD_UI" "$TABS_UI" \
          "$DIAG_UI" "$DBTAB_UI" "$MAIN_UI" "$LOG_DIR_R"; do
   [[ -f "$f" ]] || fail "Missing file: $f"
 done
@@ -138,6 +143,50 @@ do
 done
 say
 
+say "-- Aligner parameter helpers --"
+for fn in \
+  default_thread_count \
+  preset_choices \
+  get_preset_values \
+  aligner_presets \
+  aligner_parameter_spec \
+  get_aligner_parameter_defs \
+  aligner_param_input_id \
+  render_aligner_parameter_inputs \
+  coerce_aligner_param_value \
+  collect_aligner_params
+do
+  check_def_or_alias "$PARAMS" "$fn"
+done
+say
+
+say "-- Search strategy helpers --"
+for fn in \
+  build_search_strategy \
+  write_search_strategy \
+  read_search_strategy
+do
+  check_def_or_alias "$STRATEGY" "$fn"
+done
+check_ref_fixed "$STRATEGY" 'localignr_search_strategy_v1' 'search strategy schema tag present'
+say
+
+say "-- User preferences helpers --"
+for fn in \
+  ensure_user_preferences_dir \
+  load_user_preferences \
+  save_user_preferences \
+  build_current_preferences
+do
+  check_def_or_alias "$USERPREFS" "$fn"
+done
+check_ref_fixed "$USERPREFS" 'user_preferences_file <-' 'user_preferences_file path variable defined'
+say
+
+say "-- Job report helpers --"
+check_def_or_alias "$JOBREPORT" "build_job_report"
+say
+
 say "-- DB builder helpers --"
 check_def_or_alias "$MAKE" "run_makeseqdb_and_register"
 check_ref_fixed "$MAKE" 'make_backend' 'input$make_backend used in builder'
@@ -197,12 +246,25 @@ check_ref_fixed "$SERVER" "source(\"R/$(basename "$MAKE")\")" 'sources db builde
 check_ref_fixed "$SERVER" "source(\"R/$(basename "$DISPATCH")\")" 'sources dispatcher'
 check_ref_fixed "$SERVER" "source(\"R/$(basename "$DIAG")\"" 'sources diagnostics helpers'
 check_ref_fixed "$SERVER" "source(\"R/$(basename "$DBTAB")\"" 'sources databases tab helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$PARAMS")\")" 'sources aligner parameter helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$STRATEGY")\")" 'sources search strategy helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$USERPREFS")\")" 'sources user preferences helpers'
+check_ref_fixed "$SERVER" "source(\"R/$(basename "$JOBREPORT")\")" 'sources job report helpers'
 
 check_ref_fixed "$SERVER" 'input$alignmentResults_rows_selected' 'row-click input uses alignmentResults'
 check_ref_fixed "$SERVER" 'input$blast' 'run button id still blast'
 check_ref_fixed "$SERVER" 'input$blast_xml' 'load xml input still blast_xml'
 check_ref_fixed "$SERVER" 'resolve_db_selection(' 'server uses resolve_db_selection'
 check_ref_fixed "$SERVER" 'aligner_program_choices(' 'server uses aligner_program_choices'
+check_ref_fixed "$SERVER" 'collect_aligner_params(' 'server uses collect_aligner_params'
+check_ref_fixed "$SERVER" 'get_aligner_parameter_defs(' 'server uses get_aligner_parameter_defs'
+check_ref_fixed "$SERVER" 'render_aligner_parameter_inputs(' 'server uses render_aligner_parameter_inputs'
+check_ref_fixed "$SERVER" 'build_search_strategy(' 'server uses build_search_strategy'
+check_ref_fixed "$SERVER" 'read_search_strategy(' 'server uses read_search_strategy'
+check_ref_fixed "$SERVER" 'load_user_preferences(' 'server uses load_user_preferences'
+check_ref_fixed "$SERVER" 'save_user_preferences(' 'server uses save_user_preferences'
+check_ref_fixed "$SERVER" 'build_current_preferences(' 'server uses build_current_preferences'
+check_ref_fixed "$SERVER" 'build_job_report(' 'server uses build_job_report'
 
 count_fixed "$SERVER" 'observeEvent(list(input$program, input$aligner)' 'DB-choice observer occurrences'
 count_fixed "$SERVER" 'shinyDirChoose(' 'directory chooser blocks'
@@ -277,6 +339,27 @@ fi
 
 if [[ -n "$alw_line" && -n "$db_call_line" && "$db_call_line" -lt "$alw_line" ]]; then
   say "WARN       wire_databases() is called before allowed_db_choices is defined (line $db_call_line < $alw_line)"
+fi
+
+# Detect reactiveVal()/reactive() names assigned more than once in server.R.
+# A later assignment silently shadows/replaces the earlier reactiveVal object;
+# if the first declaration was meant to seed state (e.g. from a file loaded
+# at startup) and a second declaration with a hardcoded default appears
+# later, the seeded value is lost with no error at runtime.
+reactive_names="$(
+  grep -oE '^[[:space:]]*[A-Za-z_][A-Za-z0-9_.]*[[:space:]]*<-[[:space:]]*reactiveVal\(' "$SERVER" \
+    | sed -E 's/^[[:space:]]*//; s/[[:space:]]*<-.*$//' \
+    | sort
+)"
+
+dup_reactive_names="$(printf '%s\n' "$reactive_names" | uniq -d)"
+
+if [[ -n "$dup_reactive_names" ]]; then
+  while IFS= read -r nm; do
+    [[ -n "$nm" ]] || continue
+    n="$(grep -cE "^[[:space:]]*${nm}[[:space:]]*<-[[:space:]]*reactiveVal\(" "$SERVER" || true)"
+    say "WARN       '$nm' is assigned via reactiveVal() $n times in server.R (later assignment silently replaces earlier state)"
+  done <<< "$dup_reactive_names"
 fi
 
 say
