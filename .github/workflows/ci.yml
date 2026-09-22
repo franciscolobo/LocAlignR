@@ -1,0 +1,88 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch: {}
+
+# Cancel superseded runs on the same branch/PR to avoid wasting minutes on
+# stale pushes.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    env:
+      # devtools::test()/testthat error hard on any R-level warning during
+      # package load, which is stricter than we want in CI for now given
+      # some Imports (e.g. dplyr masking base/stats functions) emit
+      # startup messages rather than true warnings -- kept here as an
+      # explicit, visible switch rather than silently relying on default
+      # behavior.
+      R_KEEP_PKG_SOURCE: yes
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          use-public-rspm: true
+
+      # libxml2 is required to build the XML package from source on
+      # Ubuntu runners; libcurl/openssl cover httr-family transitive
+      # deps some tidyverse packages pull in.
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libxml2-dev \
+            libcurl4-openssl-dev \
+            libssl-dev \
+            libfontconfig1-dev \
+            libharfbuzz-dev \
+            libfribidi-dev
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: |
+            any::devtools
+            any::testthat
+          needs: check
+
+      - name: Run test suite
+        run: devtools::test(stop_on_failure = TRUE)
+        shell: Rscript {0}
+
+  audit:
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run app consistency audit
+        run: |
+          chmod +x scripts/audit_localignr_app.sh
+          ./scripts/audit_localignr_app.sh .
+
+      - name: Fail on audit red flags
+        run: |
+          # audit_localignr_app.sh currently reports MISS/WARN lines as
+          # plain text without a nonzero exit code for those cases (only
+          # fail() on missing files causes a hard exit). Re-run and grep
+          # so CI actually fails the build on any MISS/WARN, not just on
+          # a missing-file fail(). If you'd rather the script itself
+          # exit non-zero on MISS/WARN, that's a more invasive change to
+          # audit_localignr_app.sh worth doing separately.
+          OUTPUT="$(./scripts/audit_localignr_app.sh .)"
+          echo "$OUTPUT"
+          if echo "$OUTPUT" | grep -qE "^(MISS|WARN)"; then
+            echo ""
+            echo "Audit reported MISS/WARN entries above -- failing the build."
+            exit 1
+          fi
