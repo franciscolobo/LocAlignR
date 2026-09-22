@@ -62,6 +62,8 @@ parse_blast_xml_to_df <- function(xml_doc) {
       hit_ID = character(),
       hsp_q_begin = character(),
       hsp_q_end = character(),
+      hsp_h_begin = character(),
+      hsp_h_end = character(),
       hit_length = character(),
       query_fraction = character(),
       bitscore = character(),
@@ -70,52 +72,69 @@ parse_blast_xml_to_df <- function(xml_doc) {
     )
   }
 
-  results <- XML::xpathApply(xml_doc, "//Iteration", function(row) {
-    query_ID     <- XML::getNodeSet(row, "Iteration_query-def") %>% sapply(XML::xmlValue)
-    query_length <- XML::getNodeSet(row, "Iteration_query-len") %>% sapply(XML::xmlValue)
-    hit_ID       <- XML::getNodeSet(row, "Iteration_hits//Hit//Hit_id") %>% sapply(XML::xmlValue)
+  get_text1 <- function(node, path) {
+    x <- XML::getNodeSet(node, path)
+    if (!length(x)) return(NA_character_)
+    XML::xmlValue(x[[1]])
+  }
 
-    # No hits for this query
-    if (!length(hit_ID)) return(NULL)
+  iterations <- XML::getNodeSet(xml_doc, "//Iteration")
+  if (!length(iterations)) return(empty_df())
 
-    bitscore    <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_bit-score") %>% sapply(XML::xmlValue)
-    eval        <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_evalue") %>% sapply(XML::xmlValue)
-    hsp_q_begin <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
-    hsp_q_end   <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
+  rows <- list()
 
-    # Note: kept identical to current behavior.
-    hsp_s_begin <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-from") %>% sapply(XML::xmlValue)
-    hsp_s_end   <- XML::getNodeSet(row, "Iteration_hits//Hit//Hsp//Hsp_query-to") %>% sapply(XML::xmlValue)
+  for (iter_node in iterations) {
+    query_ID     <- get_text1(iter_node, "Iteration_query-def")
+    query_length <- suppressWarnings(as.numeric(get_text1(iter_node, "Iteration_query-len")))
 
-    eval <- suppressWarnings(as.numeric(eval))
-    eval <- signif(eval, digits = 3)
+    hit_nodes <- XML::getNodeSet(iter_node, "Iteration_hits//Hit")
+    if (!length(hit_nodes)) next  # no hits for this query
 
-    qlen <- suppressWarnings(as.numeric(query_length))
-    hit_length <- suppressWarnings(as.numeric(hsp_q_end) - as.numeric(hsp_q_begin) + 1)
+    for (hit_node in hit_nodes) {
+      hit_ID <- get_text1(hit_node, "Hit_id")
 
-    qfrac <- ifelse(is.finite(hit_length / qlen), round(hit_length / qlen, 2), NA_real_)
+      hsp_nodes <- XML::getNodeSet(hit_node, ".//Hsp")
+      if (!length(hsp_nodes)) next  # malformed hit with no HSPs; skip rather than fabricate a row
 
-    as.data.frame(
-      cbind(
-        query_ID,
-        hit_ID,
-        hsp_q_begin,
-        hsp_q_end,
-        hit_length,
-        query_fraction = qfrac,
-        bitscore,
-        eval
-      ),
-      stringsAsFactors = FALSE
-    )
-  })
+      for (hsp_node in hsp_nodes) {
+        bitscore_raw <- get_text1(hsp_node, "Hsp_bit-score")
+        eval_raw     <- get_text1(hsp_node, "Hsp_evalue")
+        q_begin_raw  <- get_text1(hsp_node, "Hsp_query-from")
+        q_end_raw    <- get_text1(hsp_node, "Hsp_query-to")
+        h_begin_raw  <- get_text1(hsp_node, "Hsp_hit-from")
+        h_end_raw    <- get_text1(hsp_node, "Hsp_hit-to")
 
-  # Drop NULL entries (Iterations with no hits)
-  results <- Filter(Negate(is.null), results)
+        eval_num <- suppressWarnings(as.numeric(eval_raw))
+        eval_num <- signif(eval_num, digits = 3)
 
-  if (!length(results)) return(empty_df())
+        hit_length_num <- suppressWarnings(as.numeric(q_end_raw) - as.numeric(q_begin_raw) + 1)
 
-  out <- plyr::rbind.fill(results)
+        qfrac <- if (is.finite(hit_length_num / query_length)) {
+          round(hit_length_num / query_length, 2)
+        } else {
+          NA_real_
+        }
+
+        rows[[length(rows) + 1]] <- data.frame(
+          query_ID       = as.character(query_ID),
+          hit_ID         = as.character(hit_ID),
+          hsp_q_begin    = as.character(q_begin_raw),
+          hsp_q_end      = as.character(q_end_raw),
+          hsp_h_begin    = as.character(h_begin_raw),
+          hsp_h_end      = as.character(h_end_raw),
+          hit_length     = as.character(hit_length_num),
+          query_fraction = as.character(qfrac),
+          bitscore       = as.character(bitscore_raw),
+          eval           = as.character(eval_num),
+          stringsAsFactors = FALSE
+        )
+      }
+    }
+  }
+
+  if (!length(rows)) return(empty_df())
+
+  out <- plyr::rbind.fill(rows)
   if (is.null(out)) empty_df() else out
 }
 
@@ -162,6 +181,8 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
     dplyr::mutate(
       hsp_q_begin    = suppressWarnings(as.integer(hsp_q_begin)),
       hsp_q_end      = suppressWarnings(as.integer(hsp_q_end)),
+      hsp_h_begin    = suppressWarnings(as.integer(hsp_h_begin)),
+      hsp_h_end      = suppressWarnings(as.integer(hsp_h_end)),
       hit_length     = suppressWarnings(as.integer(hit_length)),
       query_fraction = suppressWarnings(as.numeric(query_fraction)),
       pct_cov        = round(query_fraction * 100, 2),
@@ -174,7 +195,9 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
     hsp_q_begin = "Query begin",
     hsp_q_end   = "Query end",
     hit_ID      = "Hit ID",
-    hit_length  = "Hit length",
+    hsp_h_begin = "Hit begin",
+    hsp_h_end   = "Hit end",
+    hit_length  = "Aligned length",
     pct_cov     = "%cov",
     bitscore    = "Bit Score",
     eval        = "e-value"
@@ -222,12 +245,20 @@ render_clicked_summary_table <- function(row, subject_meta) {
   )
 
   data.frame(
-    Field = c("Query ID", "Hit ID", "Hit begin", "Hit end", "Hit length", "Query aln fraction", "Bit Score", "e-value"),
+    Field = c(
+      "Query ID", "Hit ID",
+      "Query begin", "Query end",
+      "Hit begin", "Hit end",
+      "Aligned length", "Query aln fraction",
+      "Bit Score", "e-value"
+    ),
     Value = c(
       as.character(row$query_ID),
       id_disp,
       as.character(row$hsp_q_begin),
       as.character(row$hsp_q_end),
+      as.character(row$hsp_h_begin),
+      as.character(row$hsp_h_end),
       as.character(row$hit_length),
       as.character(row$query_fraction),
       as.character(row$bitscore),
@@ -317,6 +348,8 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
     dplyr::mutate(
       hsp_q_begin    = suppressWarnings(as.integer(hsp_q_begin)),
       hsp_q_end      = suppressWarnings(as.integer(hsp_q_end)),
+      hsp_h_begin    = suppressWarnings(as.integer(hsp_h_begin)),
+      hsp_h_end      = suppressWarnings(as.integer(hsp_h_end)),
       hit_length     = suppressWarnings(as.integer(hit_length)),
       query_fraction = suppressWarnings(as.numeric(query_fraction)),
       bitscore       = suppressWarnings(as.numeric(bitscore)),
@@ -332,9 +365,11 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
   cols <- c(
     query_ID       = "Query ID",
     hit_ID         = "Hit ID",
-    hsp_q_begin    = "Hit begin",
-    hsp_q_end      = "Hit end",
-    hit_length     = "Hit length",
+    hsp_q_begin    = "Query begin",
+    hsp_q_end      = "Query end",
+    hsp_h_begin    = "Hit begin",
+    hsp_h_end      = "Hit end",
+    hit_length     = "Aligned length",
     query_fraction = "Query aln fraction",
     bitscore       = "Bit Score",
     eval           = "e-value"
@@ -384,6 +419,7 @@ build_and_save_html_report <- build_and_save_alignment_html_report
 #' but writes a self-contained .xlsx instead of an HTML widget: core hit
 #' columns, joined subject metadata columns, and a monospaced Alignment column
 #' per row.
+
 build_and_save_alignment_xlsx_report <- function(file, xml_doc, df, subject_meta) {
   df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
   meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
@@ -402,6 +438,8 @@ build_and_save_alignment_xlsx_report <- function(file, xml_doc, df, subject_meta
     dplyr::mutate(
       hsp_q_begin    = suppressWarnings(as.integer(hsp_q_begin)),
       hsp_q_end      = suppressWarnings(as.integer(hsp_q_end)),
+      hsp_h_begin    = suppressWarnings(as.integer(hsp_h_begin)),
+      hsp_h_end      = suppressWarnings(as.integer(hsp_h_end)),
       hit_length     = suppressWarnings(as.integer(hit_length)),
       query_fraction = suppressWarnings(as.numeric(query_fraction)),
       pct_cov        = round(query_fraction * 100, 2),
@@ -414,7 +452,9 @@ build_and_save_alignment_xlsx_report <- function(file, xml_doc, df, subject_meta
     hit_ID      = "Hit ID",
     hsp_q_begin = "Query begin",
     hsp_q_end   = "Query end",
-    hit_length  = "Hit length",
+    hsp_h_begin = "Hit begin",
+    hsp_h_end   = "Hit end",
+    hit_length  = "Aligned length",
     pct_cov     = "%cov",
     bitscore    = "Bit Score",
     eval        = "e-value"

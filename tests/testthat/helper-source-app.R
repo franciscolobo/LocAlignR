@@ -77,6 +77,15 @@ for (.f in c(
 }
 rm(.f)
 
+# --- TEMPORARY DIAGNOSTIC ---
+.diag_fn <- get("parse_blast_xml_to_df", envir = globalenv(), inherits = FALSE)
+cat("\n[DIAG] .app_r_dir =", .app_r_dir, "\n")
+cat("[DIAG] bound function contains hsp_h_begin:",
+    any(grepl("hsp_h_begin", deparse(.diag_fn))), "\n")
+cat("[DIAG] bound function environment:", format(environment(.diag_fn)), "\n")
+rm(.diag_fn)
+# --- END TEMPORARY DIAGNOSTIC ---
+
 # Checked against known real per-OS LocAlignR config locations, including
 # the macOS path confirmed in this project's actual incident:
 # ~/Library/Preferences/org.R-project.R/R/LocAlignR/user_dbs.yml
