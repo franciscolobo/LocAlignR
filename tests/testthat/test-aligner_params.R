@@ -49,4 +49,3 @@ test_that("collect_aligner_params reads and coerces values from a mock input lis
   expect_equal(params$matrix, "BLOSUM80")
   expect_equal(params$threads, 4L)
 })
-

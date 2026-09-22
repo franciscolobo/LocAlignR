@@ -210,8 +210,7 @@ server <- function(input, output, session) {
   # ---- Keep database choices synchronized with selected program + aligner ----
   observeEvent(list(input$program, input$aligner), {
     req(input$program)
-    cat("[debug DB-sync] program=", input$program, " aligner=", input$aligner, "\n")   # <-- ADD THIS LINE
-  
+#    cat("[debug DB-sync] program=", input$program, " aligner=", input$aligner, "\n")
   
     aligner <- toupper(input$aligner %||% "BLAST")
     choices <- unique(allowed_db_choices(input$program, aligner))
@@ -369,14 +368,20 @@ server <- function(input, output, session) {
   }, ignoreInit = FALSE)
   
   # ---- Run alignment ----
-    blastresults <- eventReactive(input$blast, {
+  blastresults <- eventReactive(input$blast, {
+#    cat("[debug] 1. ENTERED\n")
+
     aligner <- toupper(input$aligner %||% "BLAST")
+#    cat("[debug] 2. aligner=", aligner, "\n")
 
     validate_alignment_inputs(input, use_upload = use_upload())
+#    cat("[debug] 3. passed validate_alignment_inputs\n")
 
     prog <- match.arg(input$program, aligner_program_choices(aligner))
+#    cat("[debug] 4. prog=", prog, "\n")
 
     evalue <- suppressWarnings(as.numeric(trimws(input$eval %||% "")))
+#    cat("[debug] 5. evalue=", evalue, "\n")
 
     shiny::validate(
       shiny::need(
@@ -384,12 +389,14 @@ server <- function(input, output, session) {
         "Please provide a valid positive e-value, e.g. 1e-5, 0.001, or 1."
       )
     )
+#    cat("[debug] 6. passed evalue validate\n")
 
     params <- collect_aligner_params(
       input = input,
       aligner = aligner,
       program = prog
     )
+#    cat("[debug] 7. params collected:", paste(names(params), unlist(params), sep="=", collapse=", "), "\n")
 
     db_res <- resolve_db_selection(
       db_input = input$db,
@@ -397,25 +404,32 @@ server <- function(input, output, session) {
       program  = prog,
       aligner  = aligner
     )
+#    cat("[debug] 8. db_res: path=", db_res$db_path, " backend=", db_res$backend, " remote=", db_res$remote, "\n")
 
     logf("[RUN] aligner=%s program=%s db=%s evalue=%s", aligner, prog, input$db, evalue)
+#    cat("[debug] 9. past logf\n")
 
     file_sig <- make_query_signature(input, use_upload = use_upload())
+#    cat("[debug] 10. file_sig computed (len=", nchar(file_sig), ")\n")
+
     key <- digest::digest(list(aligner, prog, input$db, evalue, file_sig, params))
+#    cat("[debug] 11. cache key=", key, "\n")
 
     if (exists(key, envir = .cache, inherits = FALSE)) {
+#      cat("[debug] 12. CACHE HIT -- returning cached result\n")
       xml <- get(key, envir = .cache, inherits = FALSE)
-
       xml_current(xml)
       last_run_signature(current_run_signature())
       save_current_preferences(params)
-
       return(xml)
     }
+#    cat("[debug] 12. cache miss, proceeding to run\n")
 
     tmp_fa <- materialize_query_fasta(input, use_upload = use_upload())
+#    cat("[debug] 13. tmp_fa path=", tmp_fa$path, " exists=", file.exists(tmp_fa$path), "\n")
     on.exit(tmp_fa$cleanup(), add = TRUE)
 
+#    cat("[debug] 14. ABOUT TO CALL run_aligner_as_xml\n")
     xml <- run_aligner_as_xml(
       aligner     = aligner,
       program     = prog,
@@ -425,6 +439,7 @@ server <- function(input, output, session) {
       remote      = db_res$remote,
       params      = params
     )
+#    cat("[debug] 15. run_aligner_as_xml RETURNED\n")
 
     logf("[RUN] XML returned for aligner=%s program=%s", aligner, prog)
 

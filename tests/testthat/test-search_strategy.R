@@ -41,4 +41,3 @@ test_that("read_search_strategy rejects files with an unrecognized schema tag", 
 
   expect_error(read_search_strategy(tmp), "Unsupported search strategy format")
 })
-

@@ -3,6 +3,12 @@ installers/macos/dist/
 installers/**/*.app
 installers/**/*.zip
 
+#instructions to build/upload
+commands_to_build.txt
+
+#repomix instructions and artifact
+repomix*
+
 #paper
 *.docx
 

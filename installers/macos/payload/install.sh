@@ -6,8 +6,17 @@ set -euo pipefail
 # ----------------------------
 
 APP_NAME="LocAlignR"
-USER_CFG_DIR="$HOME/Library/Application Support/${APP_NAME}/config"
-USER_DB_YML="${USER_CFG_DIR}/user_dbs.yml"
+
+# Initialized after the conda environment is created (see
+# initialize_user_config_paths()). Resolved via tools::R_user_dir() so this
+# always matches exactly what inst/app/R/02_user_db_registry.R computes at
+# runtime -- a previous version of this script hardcoded these paths
+# (~/Library/Application Support/LocAlignR/config/user_dbs.yml), which
+# silently diverged from the app's real config location
+# (~/Library/Preferences/org.R-project.R/R/LocAlignR/user_dbs.yml) and
+# caused the installer to write a file the app never read.
+USER_CFG_DIR=""
+USER_DB_YML=""
 
 # Your conda channels (adjust once you publish)
 # Keep this order: conda-forge first, then bioconda, then your channel, with strict priority.
@@ -33,7 +42,7 @@ MINIFORGE_SHA256_X86_64="6c09a3550bb65bdb6d3db6f6c2b890b987b57189f3b71c67a5af499
 MANIFEST="$(cd "$(dirname "$0")" && pwd)/db_manifest.json"
 
 # Version
-APP_VERSION="0.2.0"
+APP_VERSION="0.2.1"
 
 # Helpers
 say() { print -r -- "$@"; }
@@ -184,6 +193,28 @@ manifest_get_db_json() {
     if (is.null(hit)) quit(status = 3)
     cat(jsonlite::toJSON(hit, auto_unbox = TRUE, pretty = FALSE))
   ' "$1" "$MANIFEST"
+}
+
+initialize_user_config_paths() {
+  local resolved_dir
+
+  resolved_dir="$(
+    "$CONDA_BIN" run -n "$ENV_NAME" Rscript -e '
+      cat(tools::R_user_dir("LocAlignR", which = "config"))
+    '
+  )" || die "Failed to resolve the LocAlignR configuration directory."
+
+  [[ -n "$resolved_dir" ]] ||
+    die "Resolved LocAlignR configuration directory is empty."
+
+  USER_CFG_DIR="$resolved_dir"
+  USER_DB_YML="${USER_CFG_DIR}/user_dbs.yml"
+
+  mkdir -p "$USER_CFG_DIR" ||
+    die "Failed to create configuration directory: $USER_CFG_DIR"
+
+  say "LocAlignR configuration directory: $USER_CFG_DIR"
+  say "Database registry: $USER_DB_YML"
 }
 
 yaml_upsert_db() {
@@ -902,6 +933,8 @@ Continue?"
   "$PKG" r-jsonlite r-yaml r-openxlsx || die "Conda environment creation/install failed."
 
 say "Installed ${PKG} in environment ${ENV_NAME}"
+
+initialize_user_config_paths
 
 # ----------------------------
 # Step 3: optionally download, format, and register curated databases

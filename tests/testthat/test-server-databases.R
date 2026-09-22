@@ -1,9 +1,3 @@
-# Tests wire_databases() directly via shiny::testServer(). cfg and
-# allowed_db_choices are stubbed rather than using the real config/registry
-# machinery, since allowed_db_choices_for_program() itself is already
-# covered by the pure-logic suite (test-registry.R).
-# =============================================================================
-
 .seed_and_user_registry <- function() {
   normalize_registry_df(data.frame(
     name    = c("builtin_db", "my_uniprot_blast"),
@@ -128,4 +122,3 @@ test_that("removing the currently-selected run-panel database updates its dropdo
     expect_equal(upd$selected, "builtin_db")
   })
 })
-

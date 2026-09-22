@@ -20,22 +20,29 @@ run_aligner_as_xml <- function(
   remote = FALSE,
   params = list()
 ) {
+#  cat("[debug] A. run_aligner_as_xml entered. aligner=", aligner, "\n")
   aligner <- toupper(aligner %||% "BLAST")
+#  cat("[debug] B. aligner normalized=", aligner, "\n")
 
   if (identical(aligner, "DIAMOND")) {
+#    cat("[debug] C. DIAMOND branch -- about to validate\n")
+
     shiny::validate(
       shiny::need(program %in% c("blastp", "blastx"), "DIAMOND supports only blastp and blastx."),
       shiny::need(!isTRUE(remote), "DIAMOND does not support remote databases."),
       shiny::need(grepl("\\.dmnd$", db, ignore.case = TRUE), "DIAMOND requires a .dmnd database.")
     )
+#    cat("[debug] D. DIAMOND validate PASSED. program=", program, " remote=", remote, " db=", db, "\n")
 
-    run_diamond_as_xml(
+    result <- run_diamond_as_xml(
       mode   = program,
       query  = query_fasta,
       db     = db,
       eval   = evalue,
       params = params
     )
+#    cat("[debug] E. run_diamond_as_xml RETURNED\n")
+    result
   } else {
     run_blast_as_xml(
       prog   = program,

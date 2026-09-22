@@ -1,4 +1,3 @@
-# inst/app/R/02_user_db_registry.R
 registry_schema_columns <- function() {
   c(
     "name",
@@ -94,20 +93,20 @@ make_db_registry_name <- function(name, backend) {
 
 load_or_default_config <- function(cfg_file = "config.yml") {
   cfg_path <- normalizePath(cfg_file, winslash = "/", mustWork = FALSE)
-  
+
   if (file.exists(cfg_path)) {
     cfg <- tryCatch(yaml::read_yaml(cfg_path), error = function(e) NULL)
     if (!is.null(cfg) && !is.null(cfg$databases) && length(cfg$databases)) {
       return(cfg)
     }
   }
-  
-  list(
-    databases = list(
-      Mlig_core_nt = "/Users/pereiralobof2/Projects/Erin/WolfBLAST/databases/Mlig_core_nt",
-      Mlig_core_aa = "/Users/pereiralobof2/Projects/Erin/WolfBLAST/databases/Mlig_core_aa"
-    )
-  )
+
+  # No config.yml present (or it's missing/empty/unparseable): default to an
+  # empty registry rather than fabricated data. Databases can still be added
+  # via a real config.yml (for pre-configured/curated deployments) or via
+  # the Build Database panel, which persists to user_dbs.yml independently
+  # of this function.
+  list(databases = list())
 }
 
 log_registry_config <- function(cfg, cfg_file = "config.yml") {
@@ -346,7 +345,7 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
 
   shiny::validate(
     shiny::need(
-      !(identical(aligner, "DIAMOND") && backend != "blast"),
+      !(identical(aligner, "DIAMOND") && backend != "diamond"),
       "Selected database is not registered for DIAMOND."
     ),
     shiny::need(
@@ -370,4 +369,3 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
     backend = backend
   )
 }
-

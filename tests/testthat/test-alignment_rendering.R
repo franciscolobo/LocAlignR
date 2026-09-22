@@ -20,8 +20,6 @@ test_that("wrap_alignment_with_coords computes forward-strand coordinates withou
 })
 
 test_that("wrap_alignment_with_coords excludes gap characters from position counts", {
-  # Query has a gap (deletion relative to hit); only 4 real query letters
-  # span positions 1-4, while the 5-letter hit spans 1-5.
   out <- wrap_alignment_with_coords(
     qseq = "AC-GT", mid = "|| ||", hseq = "ACTGT",
     q_from = 1, q_to = 4, h_from = 1, h_to = 5, width = 40
@@ -60,5 +58,3 @@ test_that("wrap_alignment_with_coords reports missing sequence/coordinates grace
     "Alignment coordinates are missing."
   )
 })
-
-

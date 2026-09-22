@@ -44,8 +44,8 @@ test_that("parse_blast_xml_to_df parses a single hit correctly", {
   expect_equal(nrow(out), 1)
   expect_equal(out$query_ID[1], "MyQuery")
   expect_equal(out$hit_ID[1], "sp|P12345|TARGET")
-  expect_equal(as.numeric(out$hit_length[1]), 91)              # 100 - 10 + 1
-  expect_equal(round(as.numeric(out$query_fraction[1]), 2), 0.61)  # 91 / 150
+  expect_equal(as.numeric(out$hit_length[1]), 91)
+  expect_equal(round(as.numeric(out$query_fraction[1]), 2), 0.61)
   expect_equal(as.numeric(out$bitscore[1]), 200.5)
   expect_equal(as.numeric(out$eval[1]), 1e-50)
 })
@@ -76,4 +76,3 @@ test_that("parse_blast_xml_to_df combines multiple iterations, skipping no-hit o
   expect_equal(nrow(out), 1)
   expect_equal(out$query_ID[1], "Q2")
 })
-

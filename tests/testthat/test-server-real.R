@@ -1,7 +1,3 @@
-# Tests the REAL server() function from server.R via with_sandboxed_server()
-# (defined in helper-source-app.R above).
-# =============================================================================
-
 test_that("real server(): switching aligner resets program choices to a valid one", {
   with_sandboxed_server(function(server_fn) {
     calls_env <- attr(server_fn, "update_select_calls")
@@ -34,6 +30,10 @@ test_that("real server(): DIAMOND with no registered protein DBs yields empty db
 })
 
 test_that("real server(): switching to BLAST + blastn falls back to the 'nt' shortcut when no local nucleotide DB is registered", {
+  # With load_or_default_config() now correctly defaulting to an empty
+  # registry (rather than hardcoded developer-machine paths) when no
+  # config.yml is present, this is simply the default sandboxed behavior --
+  # no special seed_config_yml needed.
   with_sandboxed_server(function(server_fn) {
     calls_env <- attr(server_fn, "update_select_calls")
 
@@ -45,15 +45,10 @@ test_that("real server(): switching to BLAST + blastn falls back to the 'nt' sho
     upd <- last_update_for(calls_env, "db")
     expect_false(is.null(upd))
     expect_equal(upd$selected, "nt")
-  }, empty_seed_registry = TRUE)
+  })
 })
 
 test_that("real server(): switching to BLAST + blastn prefers a registered local nucleotide DB over the 'nt' shortcut", {
-  # Without empty_seed_registry = TRUE, load_or_default_config() falls back
-  # to its hardcoded default databases (Mlig_core_nt / Mlig_core_aa,
-  # defined in 02_user_db_registry.R). This documents that a real,
-  # registered local database is correctly preferred over the generic
-  # remote "nt" placeholder when one is available.
   with_sandboxed_server(function(server_fn) {
     calls_env <- attr(server_fn, "update_select_calls")
 
@@ -64,7 +59,8 @@ test_that("real server(): switching to BLAST + blastn prefers a registered local
 
     upd <- last_update_for(calls_env, "db")
     expect_false(is.null(upd))
-    expect_equal(upd$selected, "Mlig_core_nt")
-  })
+    expect_equal(upd$selected, "local_nt_db")
+  }, seed_config_yml = list(
+    databases = list(local_nt_db = file.path(tempdir(), "fake_nt_db"))
+  ))
 })
-

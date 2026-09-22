@@ -1,12 +1,3 @@
-# Tests wire_diagnostics() directly via shiny::testServer(), using a minimal
-# wrapper server that mirrors exactly how server.R calls it:
-#   wire_diagnostics(input, output, db_registry = db_registry)
-#
-# The wrapper stashes db_registry in session$userData so test code can
-# mutate it mid-test (session$setInputs() only works for real Shiny inputs,
-# not for reactiveVal()s created inside the server function).
-# =============================================================================
-
 .diag_test_server <- function() {
   function(input, output, session) {
     db_registry <- reactiveVal(normalize_registry_df(NULL))
@@ -88,4 +79,3 @@ test_that("diag_log_tail responds to the refresh button", {
     expect_length(after, 1)
   })
 })
-
