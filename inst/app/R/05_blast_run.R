@@ -1,14 +1,15 @@
-# inst/app/R/05_blast_run.R
-#
 # The only function in the codebase that actually shells out to a BLAST+
 # binary. Everything else related to BLAST results (parsing, rendering,
 # export) is aligner-agnostic and lives in 04_alignment_results.R, because
 # DIAMOND's --outfmt 5 output uses the same XML schema.
 
-run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
+# Pure argument-building logic, extracted out of run_blast_as_xml() so it
+# can be unit tested directly with no mocking -- no tool discovery, no
+# process execution, no filesystem I/O beyond the already-existing
+# out_xml path string itself (which is never written to here).
+build_blast_args <- function(prog, query, db, eval, remote, params = list(), out_xml) {
   max_target_seqs <- as.integer(params$max_target_seqs %||% 10L)
   threads <- as.integer(params$threads %||% max(1L, parallel::detectCores(logical = TRUE) %||% 1L))
-  timeout <- as.integer(params$timeout_sec %||% 1800L)
   max_hsps <- as.integer(params$max_hsps %||% 1L)
   culling_limit <- params$culling_limit %||% NULL
   best_hit_overhang <- params$best_hit_overhang %||% NULL
@@ -17,8 +18,6 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
   matrix <- params$matrix %||% NULL
   gapopen <- params$gapopen %||% NULL
   gapextend <- params$gapextend %||% NULL
-
-  out_xml <- tempfile(pattern = "blast_", fileext = ".xml")
 
   args <- c(
     "-query", query,
@@ -80,6 +79,19 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
   } else {
     args <- c(args, "-num_threads", as.character(threads))
   }
+
+  args
+}
+
+run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
+  timeout <- as.integer(params$timeout_sec %||% 1800L)
+
+  out_xml <- tempfile(pattern = "blast_", fileext = ".xml")
+
+  args <- build_blast_args(
+    prog = prog, query = query, db = db, eval = eval,
+    remote = remote, params = params, out_xml = out_xml
+  )
 
   prog_path <- LocAlignR::localignr_find_tool(
     prog,

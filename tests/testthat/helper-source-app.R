@@ -66,25 +66,20 @@ for (.f in c(
   "02_user_db_registry.R",
   "03_alignment_rendering.R",
   "04_alignment_results.R",
+  "05_blast_run.R",
+  "06_diamond_run.R",
+  "07_makeseqdb.R",
   "08_aligner_dispatch.R",
   "09_aligner_params.R",
   "10_search_strategy.R",
   "11_user_preferences.R",
+  "12_job_report.R",
   "90_diagnostics.R",
   "91_databases.R"
 )) {
   .source_app_file(.f)
 }
 rm(.f)
-
-# --- TEMPORARY DIAGNOSTIC ---
-.diag_fn <- get("parse_blast_xml_to_df", envir = globalenv(), inherits = FALSE)
-cat("\n[DIAG] .app_r_dir =", .app_r_dir, "\n")
-cat("[DIAG] bound function contains hsp_h_begin:",
-    any(grepl("hsp_h_begin", deparse(.diag_fn))), "\n")
-cat("[DIAG] bound function environment:", format(environment(.diag_fn)), "\n")
-rm(.diag_fn)
-# --- END TEMPORARY DIAGNOSTIC ---
 
 # Checked against known real per-OS LocAlignR config locations, including
 # the macOS path confirmed in this project's actual incident:

@@ -290,6 +290,24 @@ check_ref_fixed "$MAIN_UI" 'panel_run_aligner()' 'ui.R mounts run panel'
 check_ref_fixed "$LOAD_UI" 'blast_xml' 'load panel defines xml input'
 say
 
+say "-- Test helper sourcing coverage --"
+
+HELPER="$ROOT/tests/testthat/helper-source-app.R"
+
+if [[ -f "$HELPER" ]]; then
+  for f in "$APP"/R/*.R; do
+    fname="$(basename "$f")"
+    if grep -qF "\"$fname\"" "$HELPER"; then
+      say "OK   sourced  $fname"
+    else
+      say "MISS sourced  $fname   (present in inst/app/R but not in helper-source-app.R's sourcing list)"
+    fi
+  done
+else
+  say "MISS file  $HELPER not found -- cannot check test-helper sourcing coverage"
+fi
+say
+
 say "-- Backend-aware registry persistence --"
 check_ref_fixed "$REG" 'backend' 'registry file supports backend field'
 check_ref_fixed "$REG" '.dmnd' 'registry infers or handles DIAMOND paths'

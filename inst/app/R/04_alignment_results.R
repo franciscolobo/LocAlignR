@@ -205,6 +205,14 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
 
   display <- display[names(cols)]
 
+  # e-value is a raw double, so browsers display its full imprecise binary
+  # representation (e.g. 3.699999999999998e-158) rather than the 3
+  # significant digits already applied upstream in parse_blast_xml_to_df().
+  # Rendering (not rounding) is the fix: keep the column numeric so
+  # sorting and the numeric range filter still work correctly, and use a
+  # JS renderer to *display* it via toExponential(2) -- e.g. "3.70e-158".
+  eval_col_index <- which(names(cols) == "eval")
+
   DT::datatable(
     display,
     colnames = unname(cols),
@@ -214,6 +222,17 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
     options = list(
       pageLength = 10,
       searchHighlight = TRUE,
+      columnDefs = list(
+        list(
+          targets = eval_col_index,
+          render = DT::JS(
+            "function(data, type, row) {",
+            "  if (type !== 'display' || data === null) return data;",
+            "  return Number(data).toExponential(2);",
+            "}"
+          )
+        )
+      ),
       drawCallback = DT::JS(
         "$('body').tooltip({selector:'[data-toggle=\"tooltip\"]', container:'body', html:true});"
       )
@@ -376,13 +395,33 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
   )
   display <- display[names(cols)]
 
+  # Same fix as the interactive results table: e-value is a raw double, so
+  # the browser displays its full imprecise binary representation (e.g.
+  # 3.699999999999998e-158) unless we tell it how to render (not round) the
+  # value. Column stays numeric; only the displayed string changes.
+  eval_col_index <- which(names(cols) == "eval")
+
   widget <- DT::datatable(
     display,
     colnames = unname(cols),
     escape = FALSE,
     selection = "none",
     filter = "top",
-    options = list(pageLength = 20, searchHighlight = TRUE)
+    options = list(
+      pageLength = 20,
+      searchHighlight = TRUE,
+      columnDefs = list(
+        list(
+          targets = eval_col_index,
+          render = DT::JS(
+            "function(data, type, row) {",
+            "  if (type !== 'display' || data === null) return data;",
+            "  return Number(data).toExponential(2);",
+            "}"
+          )
+        )
+      )
+    )
   ) %>% DT::formatRound("query_fraction", digits = 2)
 
   tooltip_css <- htmltools::tags$style(htmltools::HTML("

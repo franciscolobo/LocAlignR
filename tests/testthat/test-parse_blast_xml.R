@@ -10,14 +10,6 @@
 
 test_that("parse_blast_xml_to_df returns an empty frame with correct columns when there are no hits", {
 
-  # --- TEMPORARY DIAGNOSTIC ---
-  .fn <- get("parse_blast_xml_to_df")
-  cat("\n[DIAG-INTEST] contains hsp_h_begin:", any(grepl("hsp_h_begin", deparse(.fn))), "\n")
-  cat("[DIAG-INTEST] environmentName:", environmentName(environment(.fn)), "\n")
-  cat("[DIAG-INTEST] identical to globalenv copy:",
-      identical(.fn, get("parse_blast_xml_to_df", envir = globalenv(), inherits = FALSE)), "\n")
-  # --- END TEMPORARY DIAGNOSTIC ---
-
   doc <- .make_blast_xml(paste0(
     '<Iteration>',
     '<Iteration_query-def>Query1</Iteration_query-def>',
