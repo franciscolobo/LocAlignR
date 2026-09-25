@@ -97,7 +97,7 @@ wrap_alignment_with_coords <- function(qseq, mid, hseq,
     
     paste0(
       sprintf("Query %6d  %s  %6d", q_start, q_chunk, q_end), "\n",
-      sprintf("             %s", m_chunk), "\n",
+      sprintf("              %s", m_chunk), "\n",
       sprintf("Sbjct %6d  %s  %6d", h_start, h_chunk, h_end)
     )
   })
