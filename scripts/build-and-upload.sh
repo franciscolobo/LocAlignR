@@ -11,7 +11,8 @@ R_PACKAGE_NAME="LocAlignR"
 RECIPE_DIR="recipe"
 BUILD_ENV="localignr-build"
 TEST_ENV="localignr-test"
-CHANNELS="-c conda-forge -c bioconda -c franciscolobo"
+CHANNELS=(-c conda-forge -c bioconda -c franciscolobo)
+ANACONDA_USER="franciscolobo"
 
 # Colors for output
 RED='\033[0;31m'
@@ -37,7 +38,7 @@ log_warn() {
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    echo -e "${RED}[ERROR]${NC} $1" >&2
 }
 
 # ============================================================================
@@ -64,31 +65,43 @@ setup_ssl() {
 get_current_version() {
     # First try to get from Jinja2 set statement
     local jinja_version
-    jinja_version=$(grep "set version" "$RECIPE_DIR/meta.yaml" | grep -o '"[^"]*"' | tr -d '"')
+    jinja_version=$(grep "set version" "$RECIPE_DIR/meta.yaml" | grep -o '"[^"]*"' | tr -d '"' || true)
     
     if [[ -n "$jinja_version" ]]; then
         echo "$jinja_version"
     else
         # Fall back to direct version field
-        grep -E "^\s+version:" "$RECIPE_DIR/meta.yaml" | awk '{print $2}'
+        grep -E "^[[:space:]]+version:" "$RECIPE_DIR/meta.yaml" | awk '{print $2}'
     fi
 }
 
 get_build_number() {
     # Try Jinja2 first
     local jinja_build
-    jinja_build=$(grep "set build" "$RECIPE_DIR/meta.yaml" | grep -oE '[0-9]+' | head -1)
+    jinja_build=$(grep "set build" "$RECIPE_DIR/meta.yaml" | grep -oE '[0-9]+' | head -1 || true)
     
     if [[ -n "$jinja_build" ]]; then
         echo "$jinja_build"
     else
         # Fall back to direct number field
-        grep -E "^\s+number:" "$RECIPE_DIR/meta.yaml" | awk '{print $2}'
+        grep -E "^[[:space:]]+number:" "$RECIPE_DIR/meta.yaml" | awk '{print $2}'
     fi
 }
 
 update_version() {
     local new_version="$1"
+    if [[ ! "$new_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        log_error "Invalid version: $new_version (expected X.Y.Z)"
+        exit 1
+    fi
+    if [[ "$new_version" == "$(get_current_version)" ]]; then
+        log_error "Version already current; use --bump-build instead"
+        exit 1
+    fi
+    if ! grep -q '^Version:' DESCRIPTION; then
+        log_error "DESCRIPTION has no Version field"
+        exit 1
+    fi
     
     # Check if using Jinja2 templates
     if grep -q "set version" "$RECIPE_DIR/meta.yaml"; then
@@ -107,7 +120,9 @@ update_version() {
     fi
     
     rm -f "$RECIPE_DIR/meta.yaml.bak"
-    log_success "Updated version to $new_version (build 0)"
+    sed -i.bak "s/^Version:.*/Version: $new_version/" DESCRIPTION
+    rm -f DESCRIPTION.bak
+    log_success "Updated R and Conda versions to $new_version (build 0)"
 }
 
 bump_build_number() {
@@ -126,6 +141,18 @@ bump_build_number() {
     
     rm -f "$RECIPE_DIR/meta.yaml.bak"
     log_success "Bumped build number to $new_build"
+}
+
+validate_versions() {
+    local recipe_version description_version
+    recipe_version=$(get_current_version)
+    description_version=$(awk '/^Version:/ {print $2; exit}' DESCRIPTION)
+    if [[ ! "$recipe_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ||
+          "$recipe_version" != "$description_version" ]]; then
+        log_error "Version mismatch: recipe=$recipe_version, DESCRIPTION=$description_version"
+        exit 1
+    fi
+    log_success "R and Conda versions match: $recipe_version"
 }
 
 # ============================================================================
@@ -181,13 +208,12 @@ build_package() {
     # Build with explicit channels
     log_info "Running conda mambabuild..."
     conda mambabuild \
-        -c conda-forge \
-        -c bioconda \
-        -c franciscolobo \
+        "${CHANNELS[@]}" \
+        --no-anaconda-upload \
         "$RECIPE_DIR"
     
     # Get output path
-    PACKAGE_PATH=$(conda build "$RECIPE_DIR" --output)
+    PACKAGE_PATH=$(conda build "${CHANNELS[@]}" "$RECIPE_DIR" --output)
     
     if [[ ! -f "$PACKAGE_PATH" ]]; then
         log_error "Build failed - package not found at: $PACKAGE_PATH"
@@ -195,7 +221,6 @@ build_package() {
     fi
     
     log_success "Package built: $PACKAGE_PATH"
-    echo "$PACKAGE_PATH"
 }
 
 # ============================================================================
@@ -212,14 +237,10 @@ upload_package() {
     if [[ -n "${ANACONDA_API_TOKEN:-}" ]]; then
         log_info "Using ANACONDA_API_TOKEN for authentication"
     else
-        log_warn "ANACONDA_API_TOKEN not set. Ensure you're logged in with 'anaconda login'"
+        log_info "Using stored Anaconda credentials"
     fi
     
-    if [[ "$label" == "main" ]]; then
-        anaconda upload "$package_path"
-    else
-        anaconda upload --label "$label" "$package_path"
-    fi
+    anaconda upload --user "$ANACONDA_USER" --label "$label" "$package_path"
     
     log_success "Package uploaded successfully"
 }
@@ -228,35 +249,44 @@ upload_package() {
 # Testing
 # ============================================================================
 
-test_installation() {
-    local version="$1"
-    
-    log_info "Testing installation in fresh environment..."
-    
+test_installation() (
+    local package_path="$1"
+    local version="$2"
+    local package_file build_string test_channel
+    package_file=$(basename "$package_path")
+    build_string="${package_file%.tar.bz2}"
+    build_string="${build_string%.conda}"
+    build_string="${build_string#${PACKAGE_NAME}-${version}-}"
+
+    log_info "Testing exact local package: $package_file"
     cleanup_test_env
-    
-    # Create test environment
+
+    # A local channel allows dependency solving (unlike explicit archive installs).
+    test_channel=$(mktemp -d)
+    trap 'rm -rf -- "$test_channel"' EXIT
+    mkdir -p "$test_channel/noarch"
+    cp "$package_path" "$test_channel/noarch/"
+    conda index "$test_channel"
+
     conda create -n "$TEST_ENV" -y \
-        --override-channels $CHANNELS \
-        "$PACKAGE_NAME=$version"
-    
-    # Test R package loads
-    log_info "Verifying R package version..."
-    
-    local installed_version
-    installed_version=$(conda run -n "$TEST_ENV" R --quiet --vanilla -e \
-        "packageVersion('$R_PACKAGE_NAME')" 2>&1 | grep -oE "[0-9]+\.[0-9]+\.[0-9]+")
-    
-    if [[ "$installed_version" == "$version" ]]; then
-        log_success "Installation test passed: $R_PACKAGE_NAME v$installed_version"
-    else
-        log_error "Version mismatch: expected $version, got $installed_version"
-        exit 1
-    fi
-    
-    # Cleanup
+        --override-channels --strict-channel-priority \
+        -c "$test_channel" "${CHANNELS[@]}" \
+        "$PACKAGE_NAME=$version=$build_string"
+
+    log_info "Verifying R package version and entry point..."
+    conda run -n "$TEST_ENV" Rscript --vanilla -e \
+        "library('$R_PACKAGE_NAME'); stopifnot(as.character(packageVersion('$R_PACKAGE_NAME')) == '$version', is.function(LocAlignR::run_app)); cat('R package validation passed\\n')"
+
+    log_info "Checking alignment executables..."
+    local program
+    for program in blastp blastn blastx tblastn tblastx makeblastdb; do
+        conda run -n "$TEST_ENV" "$program" -version
+    done
+    conda run -n "$TEST_ENV" diamond version
+
     conda env remove -n "$TEST_ENV" -y
-}
+    log_success "All installation tests passed"
+)
 
 # ============================================================================
 # Main Pipeline
@@ -269,9 +299,9 @@ Usage: $0 [OPTIONS]
 Options:
     --version VERSION       Set new version (bumps version, resets build to 0)
     --bump-build            Increment build number (keep version)
-    --skip-build            Skip building (use for upload-only)
+    --skip-build            Skip building (requires --package-path)
     --skip-upload           Skip upload (build and test only)
-    --skip-test             Skip installation test
+    --skip-test             Skip extra installation test (recipe tests still run)
     --label LABEL           Upload label (default: main)
     --package-path PATH     Use existing package (skip build)
     -h, --help              Show this help
@@ -283,14 +313,14 @@ Examples:
     # Rebuild with same version
     $0 --bump-build
 
-    # Build only (no upload)
+    # Build and test (no upload)
     $0 --version 0.1.2 --skip-upload
 
-    # Upload existing package
+    # Test and upload existing package (must match current recipe)
     $0 --package-path /path/to/package.tar.bz2
 
     # Development release
-    $0 --version 0.1.2-dev --label dev
+    $0 --version 0.1.2 --label dev
 EOF
 }
 
@@ -307,6 +337,10 @@ main() {
     while [[ $# -gt 0 ]]; do
         case $1 in
             --version)
+                if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+                    log_error "--version requires a value"
+                    exit 1
+                fi
                 new_version="$2"
                 shift 2
                 ;;
@@ -327,10 +361,18 @@ main() {
                 shift
                 ;;
             --label)
+                if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+                    log_error "--label requires a value"
+                    exit 1
+                fi
                 label="$2"
                 shift 2
                 ;;
             --package-path)
+                if [[ $# -lt 2 || -z "$2" || "$2" == --* ]]; then
+                    log_error "--package-path requires a value"
+                    exit 1
+                fi
                 package_path="$2"
                 skip_build=true
                 shift 2
@@ -353,6 +395,21 @@ main() {
         exit 1
     fi
     
+    if [[ "$skip_build" == true ]]; then
+        if [[ -z "$package_path" || ! -f "$package_path" ]]; then
+            log_error "--skip-build requires an existing --package-path"
+            exit 1
+        fi
+        if [[ -n "$new_version" || "$bump_build" == true ]]; then
+            log_error "Cannot change version or build when using an existing archive"
+            exit 1
+        fi
+    fi
+    if [[ ! -f DESCRIPTION || ! -f "$RECIPE_DIR/meta.yaml" ]]; then
+        log_error "Run this script from the LocAlignR repository root"
+        exit 1
+    fi
+
     # Setup
     setup_ssl
     
@@ -371,32 +428,46 @@ main() {
     BUILD_NUM=$(get_build_number)
     log_info "Package: $PACKAGE_NAME v$VERSION (build $BUILD_NUM)"
     
-    # Build
-    if [[ "$skip_build" == false ]]; then
-        setup_build_env
-        package_path=$(build_package)
-    elif [[ -z "$package_path" ]]; then
-        log_error "Must provide --package-path when using --skip-build"
+    validate_versions
+    if [[ ! "$BUILD_NUM" =~ ^[0-9]+$ ]]; then
+        log_error "Invalid recipe build number: $BUILD_NUM"
         exit 1
     fi
-    
-    # Upload
+
+    # Activate build tools for both new builds and existing archives.
+    setup_build_env
+    if [[ "$skip_build" == false ]]; then
+        build_package
+        package_path="$PACKAGE_PATH"
+    else
+        eval "$(conda shell.bash hook)"
+        conda activate "$BUILD_ENV"
+    fi
+
+    if [[ ! -f "$package_path" ]]; then
+        log_error "Package file not found: $package_path"
+        exit 1
+    fi
+
+    # Prevent an archive for a different release being uploaded by mistake.
+    case "$(basename "$package_path")" in
+        "$PACKAGE_NAME-$VERSION-"*"_$BUILD_NUM.tar.bz2"|"$PACKAGE_NAME-$VERSION-"*"_$BUILD_NUM.conda") ;;
+        *) log_error "Archive does not match recipe version/build: $package_path"; exit 1 ;;
+    esac
+
+    # Validate before upload, including when --skip-upload is used.
+    if [[ "$skip_test" == false ]]; then
+        test_installation "$package_path" "$VERSION"
+    else
+        log_warn "Skipping additional installation test (--skip-test specified)"
+    fi
+
     if [[ "$skip_upload" == false ]]; then
         upload_package "$package_path" "$label"
     else
         log_info "Skipping upload (--skip-upload specified)"
     fi
-    
-    # Test
-    if [[ "$skip_test" == false ]] && [[ "$skip_upload" == false ]]; then
-        # Wait a moment for conda to index
-        log_info "Waiting 10s for conda to index..."
-        sleep 10
-        test_installation "$VERSION"
-    else
-        log_info "Skipping installation test"
-    fi
-    
+
     log_success "Pipeline complete!"
     echo ""
     echo "Summary:"

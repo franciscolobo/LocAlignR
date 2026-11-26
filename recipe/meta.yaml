@@ -1,6 +1,6 @@
 {% set name = "r-localignr" %}
 {% set version = "0.2.1" %}
-{% set build = 1 %}
+{% set build = 3 %}
 
 package:
   name: {{ name|lower }}
@@ -54,7 +54,18 @@ requirements:
 
 test:
   commands:
-    - $R -e "library('LocAlignR')"
+    - >-
+      $R --vanilla -e
+      "library('LocAlignR');
+      stopifnot(as.character(packageVersion('LocAlignR')) == '{{ version }}');
+      stopifnot(is.function(LocAlignR::run_app))"
+    - blastp -version
+    - blastn -version
+    - blastx -version
+    - tblastn -version
+    - tblastx -version
+    - makeblastdb -version
+    - diamond version
 
 about:
   home: https://github.com/franciscolobo/LocAlignR
