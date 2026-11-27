@@ -22,9 +22,9 @@ cat > "$APP/Contents/Info.plist" <<'PLIST'
     <key>CFBundleIdentifier</key>
     <string>org.localignr.installer</string>
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>0.2.1</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.1</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>

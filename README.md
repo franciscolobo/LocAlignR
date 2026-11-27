@@ -1,204 +1,99 @@
 # LocAlignR
 
-**LocAlignR** is a local, offline Shiny application for biological sequence alignment.  
-It provides a graphical interface to run **BLAST** and **DIAMOND** on your own machine, without uploading data to external servers.
+![LocAlignR](docs/logo/localign_hexagonal_logo.png)
 
-LocAlignR is designed for reproducible research, local database usage, and environments where data privacy or limited connectivity are important.
+**LocAlignR** is a free, open-source, cross-platform R/Shiny application for biological sequence alignment. It provides a graphical interface for searching local sequence databases with BLAST and DIAMOND, managing databases, exploring alignments, and exporting results.
 
-LocAlignR was inspired by Shiny_BLAST: https://github.com/ScientistJake/Shiny_BLAST
+Local searches run on your computer, without sending query sequences to a remote alignment service. Optional remote BLAST searches are also supported.
 
----
+LocAlignR was inspired by [Shiny_BLAST](https://github.com/ScientistJake/Shiny_BLAST).
 
 ## Features
 
-- Local sequence alignment using:
-  - BLAST+ (nucleotide and protein)
-  - DIAMOND (fast protein alignments)
-- Shiny-based interactive interface
-- Support for custom, user-built databases
-- Export full alignment results as an interactive HTML report, a formatted Excel spreadsheet, or raw XML
-- Save and reload search configurations (JSON), and export job summary reports (YAML)
-- Fully offline operation after installation
-- Cross-platform: Linux, macOS, and Windows
-- Conda-based installation for external tools
-- Built-in **Diagnostics** tab for tool and environment checks
-
----
-
-## Requirements
-
-- R (>= 4.2 recommended)
-- BLAST+ and DIAMOND available on `PATH`
-- Supported operating systems:
-  - Linux
-  - macOS (Intel and Apple Silicon)
-  - Windows
-
-The recommended and supported way to install BLAST and DIAMOND is via **conda**.
-
----
+- BLAST+: `blastp`, `blastn`, `blastx`, `tblastn` and `tblastx`.
+- DIAMOND: `blastp` and `blastx` against protein databases.
+- Paste sequences or upload FASTA files; load existing alignment XML files.
+- Configure search parameters and save or reload search strategies.
+- Build local BLAST and DIAMOND databases with optional metadata and manage them in the database registry.
+- Explore hits in an interactive, filterable table and inspect individual alignments.
+- Export interactive HTML reports, Excel workbooks, raw XML, JSON search strategies and YAML job summaries.
+- Inspect tool availability and runtime paths in the **Diagnostics** tab.
 
 ## Installation
 
-### Conda-based installation (recommended)
+Download platform-specific installers from [GitHub Releases](https://github.com/franciscolobo/LocAlignR/releases). If a platform installer is not yet listed, it has not been published there.
 
-LocAlignR is designed to be installed and run inside a conda environment that provides
-BLAST, DIAMOND, and all required R dependencies.
+| Platform | Recommended installation |
+| --- | --- |
+| Windows (x86-64; Windows 10 version 1809 or later / Windows 11) | Windows installer `.exe` |
+| macOS (Apple Silicon or Intel) | macOS installer `.zip` |
+| Linux | Conda |
 
-See:
+Internet access is required for installation and optional reference database downloads. Allow sufficient disk space for the runtime and your sequence databases.
 
-docs/installation.md
+### Windows
 
-for a fully reproducible installation procedure, including exact channel configuration.
+1. Download the Windows installer and its checksum from the release page.
+2. Run the installer. It reuses a suitable Conda installation or provisions a private Miniforge installation, creates a dedicated environment, and downloads checksum-verified official BLAST and DIAMOND binaries.
+3. Optionally select the curated protein database and desktop shortcut.
+4. Launch LocAlignR from the Start menu or the desktop shortcut.
 
----
+Administrator privileges are not required by the installer itself. Institutionally managed computers may impose additional restrictions. Windows installers are currently unsigned; SmartScreen may warn or block execution. Verify the checksum and contact your IT administrator if execution is blocked. Do not disable institutional security controls.
 
-## Running LocAlignR
+### macOS
 
-After installation, launch LocAlignR from R:
+Download and extract the macOS installer ZIP appropriate for your Mac. Open **LocAlignR Installer.app** and follow the Terminal prompts. The installer provisions Conda if necessary, installs the runtime and offers optional database provisioning and a launcher in `~/Applications`.
 
-```r
-LocAlignR::run_app()
+### Linux / manual Conda installation on macOS
+
+With Conda or Miniforge available, run:
+
+```bash
+conda create -n localignr -y --override-channels --strict-channel-priority \
+  -c conda-forge -c bioconda -c franciscolobo \
+  r-localignr=0.2.1 r-jsonlite
+conda activate localignr
+R -e 'LocAlignR::run_app()'
 ```
 
-This will start the Shiny application locally and open it in your browser.
+On Windows, use the graphical installer rather than the standard `r-localignr` Conda package. The separate `r-localignr-windows` package is an installer component and does not provision the alignment engines by itself.
 
-## Databases
+See [installation and troubleshooting](docs/installation.md) for further details.
 
-LocAlignR does not ship with alignment databases.
+## Quick start
 
-### User-provided databases
+1. Launch LocAlignR and check the **Diagnostics** tab.
+2. If you have not installed a reference database, open **Build local sequence database**, select a FASTA file, choose a database name, molecule type, backend and output directory, then build the database. DIAMOND accepts protein databases only.
+3. In the alignment panel, paste a query sequence or upload a FASTA file. Choose the aligner, program and a compatible local database.
+4. Set the e-value and any advanced parameters, then run the search.
+5. Explore the results table and select a hit to inspect its alignment. Use the Downloads section to save results or the search configuration.
 
-You may create your own BLAST or DIAMOND databases locally.
+Example FASTA files are available in [docs/test-data](docs/test-data/).
 
-The application includes functionality to build them.
+## Reference databases
 
-For guidance:
+LocAlignR does not bundle large sequence databases. You can build your own from FASTA files or optionally download the UniProtKB/Swiss-Prot dataset offered by the desktop installers. The current installer manifest identifies the 2026-06-05 dataset hosted on Zenodo, with associated sequence metadata. The installers verify the archive checksum, format the database locally for BLAST and DIAMOND and register it for use in LocAlignR.
 
-See the Build database panel in the application
-
-Or consult the documentation in docs/
-
-### Curated reference databases (optional)
-
-LocAlignR also provides access to a small, non-redundant set of curated reference databases with representative homolog sets across major taxonomic groups.
-
-These databases are:
-
-- Hosted externally on Zenodo
-
-- Downloaded on demand from within the application interface
-
-- Stored locally on the user’s machine
-
-- Formatted locally using BLAST (makeblastdb) or DIAMOND tools
-
-This approach avoids shipping large data files with the application while ensuring:
-
-- Reproducibility
-
-- Transparent provenance
-
-- Full offline use after download
-
-Downloaded databases can be reused across sessions and configured once.
-
----
+The **Databases** tab shows registered databases and their on-disk status. Database registrations are maintained separately from the application runtime.
 
 ## Results and exports
 
-Once an alignment run completes, results are shown in an interactive, filterable
-table, with per-hit metadata (when available) and alignment detail on row click.
-
-Several export options are available from the **Downloads** section of the run
-panel. These fall into two distinct categories — full alignment results, and
-records of how a search was configured/run — which is important to keep in
-mind since they are not interchangeable:
-
-**Full alignment results** (every hit, with sequences/coordinates):
-
 | Format | Contents |
 | --- | --- |
-| HTML report | Self-contained, interactive results table with hover tooltips showing metadata and full alignments |
-| Excel spreadsheet | Formatted `.xlsx` workbook with all hits, joined metadata columns, and per-hit alignment text |
-| XML | Raw BLAST/DIAMOND XML output, for reuse in other tools or pipelines |
+| HTML report | Interactive results table with metadata and alignment details |
+| Excel (`.xlsx`) | Hit-level results, metadata and alignment text |
+| XML | Raw alignment engine output |
+| JSON search strategy | Search settings for repeating or sharing a search, not hit-level results |
+| YAML job report | Search configuration and a brief summary, not the full hit table |
 
-**Search configuration and run records** (no hit-level data):
+## Privacy and offline use
 
-| Format | Contents |
-| --- | --- |
-| Search strategy | JSON file capturing only the aligner, program, database, e-value, preset, and parameters used — no results. Intended to be reloaded via "Load strategy" to repeat the exact same search later, or to share a search setup with collaborators |
-| Job report | YAML file recording the search configuration, the database used, and a brief summary (hit count, top hit, top bit score, top e-value) — not the full hit table. Useful for keeping a record of what was run and its headline outcome, alongside one of the full-results exports above |
+Local BLAST and DIAMOND searches can run offline after the required software and databases are installed. The special BLAST database selections `nr` and `nt` initiate remote BLAST searches and transmit query sequences to NCBI. Do not select them for confidential data. Installation and optional reference database downloads require network access. Diagnostic logs can contain local paths and environment information; review logs before sharing them.
 
----
+## Citation, license and support
 
-## Configuration
+Please cite LocAlignR using [CITATION.cff](CITATION.cff) or `citation("LocAlignR")` in R. The project is distributed under the [MIT License](LICENSE); external alignment engines and their dependencies retain their own licenses.
 
-LocAlignR uses two levels of configuration:
+Report problems or request features through [GitHub Issues](https://github.com/franciscolobo/LocAlignR/issues). See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines.
 
-- **Default, read-only configuration** bundled with the app
-
-- **User-specific configuration** stored in an OS-appropriate location
-
-For advanced users, external tool paths can be controlled via environment variables if needed:
-
-- LOCALIGN_BLASTP
-
-- LOCALIGN_BLASTN
-
-- LOCALIGN_MAKEBLASTDB
-
-- LOCALIGN_DIAMOND
-
-The Diagnostics tab reports which tools are detected and which paths are in use.
-
----
-
-## Development notes
-
-- A minimal R package wrapper is used to provide:
-
- - LocAlignR::run_app()
-
- - versioning
-
- - citation support
-
-- Developer-only tooling (e.g. renv) is kept under dev/ and is optional
-
----
-
-## Project status
-
-LocAlignR is under active development.
-
-Interfaces, workflows, and configuration options may evolve, but releases will be
-tagged and versioned.
-
----
-
-## Citation
-
-If you use LocAlignR in academic work, please cite it using the information in:
-
-- CITATION.cff (GitHub / general use)
-
-- citation("LocAlignR") from within R
-
----
-
-## License
-
-LocAlignR is released under the MIT License.
-
-See the LICENSE file for details.
-
----
-
-## Contact and contributions
-
-For bug reports, feature requests, or questions, please open an issue on GitHub.
-
-Contributions are welcome.
-
-See CONTRIBUTING.md for guidelines.
+Developer documentation: [build automation](docs/BUILD-AUTOMATION.md) and [Windows installer build instructions](installers/windows/BUILD.md).

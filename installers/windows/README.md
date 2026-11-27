@@ -1,3 +1,5 @@
-# Windows installer revision 3
+# Windows installer
 
-See the root patch README for build instructions. This revision uses `r-localignr-windows` and downloads checksum-pinned official BLAST+ 2.17.0 and DIAMOND 2.2.8 archives at installation time. No local channel or redistributed engine package is required. Existing Swiss-Prot provisioning, launcher and manifest are retained. Default development target: `%LOCALAPPDATA%\LocAlignR-upstream-test`. Windows compilation and functional testing are still required. Preserve the canonical manifest in `installers/macos/payload/db_manifest.json`.
+LocAlignR uses `r-localignr-windows` and downloads official BLAST+ 2.17.0 and DIAMOND 2.2.8 at installation time, verifying their SHA-256 checksums. No custom Conda channel for native alignment engines is required. See [BUILD.md](BUILD.md) for developer instructions and [user installation documentation](../../docs/installation.md) for installation and uninstallation.
+
+The production installer uses `%LOCALAPPDATA%\LocAlignR`. Development builds use `%LOCALAPPDATA%\LocAlignR-upstream-test` and a separate application identifier. The canonical database manifest is `../macos/payload/db_manifest.json` (the local snapshot is a fallback).

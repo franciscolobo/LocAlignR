@@ -1,35 +1,26 @@
-# LocAlignR Windows installer: direct upstream downloads (revision 3)
+# Building the LocAlignR Windows installer
 
-This patch is for the **LocAlignR** repository, not the independent Windows bioinformatics recipes repository. It adds `recipe-windows/` and replaces the Windows installer sources in `installers/windows/`. The existing `recipe/`, `scripts/build-and-upload.sh`, macOS installer, R application and database manifest are unchanged.
+## Compile using GitHub Actions (recommended)
 
-## Why a second recipe?
+In the LocAlignR repository, run **Actions > Build Windows Installer > Run workflow**. The workflow compiles `LocAlignR.iss` using Inno Setup on a Windows runner and produces the `LocAlignR-Windows-Installer` artifact containing the executable and SHA256SUMS.txt. It does not publish releases automatically. Artifacts expire after 30 days.
 
-The existing noarch `r-localignr` package requires `blast` and `diamond` through its Conda runtime metadata. Simply downloading executables would not satisfy that dependency solver. The separate noarch package `r-localignr-windows` contains the same R package (`LocAlignR`), with R dependencies but no alignment-engine dependencies. It is intended only for the Windows installer. Its first build is 0. The installer explicitly requests `vc14_runtime` and `ucrt` on Windows. Never install both R package variants in the same environment.
+For a production build use `Development 0` and `ForcePrivateConda 0`. For an isolated test use `Development 1`; set `ForcePrivateConda 1` only to exercise the private Miniforge bootstrap. Local compilation is also possible using Inno Setup 6.3+ (open LocAlignR.iss and compile).
 
-## Build the Windows installer package on Mac
+The runtime is dedicated to the application. The installer downloads official upstream binaries without republishing them. License/documentation files are preserved in the environment. The uninstaller removes the dedicated runtime, optionally removes installer-owned Miniforge, and preserves separately stored databases and registry. Test the production artifact on an unrestricted Windows machine before publication; signing is not yet configured.
 
-From the LocAlignR repository root, after copying these directories, confirm `DESCRIPTION` is version 0.2.1. In your existing build environment:
+## Build the Windows R package only when required
+
+The noarch package `r-localignr-windows` contains the R application but does not depend on Conda-managed BLAST or DIAMOND. Never install it alongside `r-localignr` in the same environment. Synchronize recipe versions with DESCRIPTION; increment the build number before replacing published content at the same version. Do not overwrite existing published archives.
+
+From repository root on Mac:
 
 ```bash
 conda activate localignr-build
-conda-build recipe-windows \
-    --no-anaconda-upload \
-    --override-channels \
-    -c conda-forge \
-    -c bioconda \
-    -c franciscolobo
-  
-PACKAGE_PATH=$(conda-build recipe-windows --output)
+conda-build recipe-windows --no-anaconda-upload --override-channels \
+  -c conda-forge -c bioconda -c franciscolobo
+PACKAGE_PATH=$(conda-build recipe-windows --output --override-channels \
+  -c conda-forge -c bioconda -c franciscolobo)
 ls -lh "$PACKAGE_PATH"
-anaconda upload --user franciscolobo "$PACKAGE_PATH"
 ```
 
-Select anaconda.org if prompted. The recipe test checks the internal R package version and entry point. The new package does not include the upstream binaries. Do not use the existing `scripts/build-and-upload.sh` for this variant: that script targets `recipe/` and checks Conda-installed engines. Keep the two recipe versions and DESCRIPTION synchronized on future releases. Bump the Windows recipe build number when changing a published archive without changing the version.
-
-## Build and test the installer
-
-Open `installers/windows/LocAlignR.iss` with Inno Setup 6.3+ (7 was used for the previous revision), and compile. The default development installation has a distinct app ID, default directory `%LOCALAPPDATA%\LocAlignR-upstream-test`, and output `LocAlignR-0.2.1-Windows-x86_64-Setup-upstream-test.exe`. It does not require the local Windows Conda channel. Close other LocAlignR instances before installation. The registry is shared across installations; back it up before testing. The existing test installation remains untouched. The optional database task defaults to a new database folder, and uses the same canonical macOS manifest when built in the repository. The fallback manifest snapshot is unchanged.
-
-First test without optional database download. Verify the desktop launcher, database creation, BLAST and DIAMOND alignments, XML parsing and export. Then test optional database provisioning in a new empty destination. Inspect logs if a step fails. The installer uses its own temporary extraction directory, Windows tar, and R already installed in the runtime environment for discovering and copying files. It does not require PowerShell or Python. Upstream archives are fetched directly on the user's computer and checked against the pinned SHA256 values copied from the previously validated Windows recipes. Full BLAST bin contents are copied; DIAMOND executable and sibling DLLs are copied. License and documentation files are kept under `upstream-engine-notices` in the environment. Existing differing files are never overwritten. Conda-managed BLAST/DIAMOND and the old r-localignr variant are rejected to avoid mixed installations. Unmanaged engine files may remain after Conda environment removal; inspect the dedicated test prefix and remove only installer-owned files if necessary. The optional databases and shared registry are intentionally retained.
-
-After validating this development variant, production mode is selected with `#define Development 0` in LocAlignR.iss. Do not switch until clean installation, bootstrap, upgrade/uninstall behavior and signing have been tested. This is a source patch, not a compiled installer. No Windows execution or compilation was performed in the authoring environment. Direct-download distribution avoids hosting upstream engine archives or binaries, but does not waive their license terms. Do not embed, mirror or upload engine binaries as part of this distribution.
+After successful validation, authenticate on Anaconda.org and upload the exact newly built archive with `anaconda upload --user franciscolobo "$PACKAGE_PATH"`. Do not use the standard recipe build script for this variant.

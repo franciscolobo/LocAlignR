@@ -1,175 +1,62 @@
-# Installation
+# Installation and troubleshooting
 
-LocAlign is distributed primarily as a conda package. This guarantees that all system-level dependencies (BLAST, DIAMOND, R, and R packages) are installed consistently across Linux, macOS, and Windows.
+## Windows
 
----
+Use the Windows x86-64 installer from [GitHub Releases](https://github.com/franciscolobo/LocAlignR/releases). Windows 10 version 1809 or later and Windows 11 are the intended targets. Internet access and sufficient local disk space are required. The installer runs without elevation, subject to local IT policy.
 
-## Prerequisites
+The installer creates `%LOCALAPPDATA%\LocAlignR\envs\localignr`, reuses Conda when available or installs private Miniforge under the application directory, installs `r-localignr-windows=0.2.1`, and provisions official BLAST+ 2.17.0 and DIAMOND 2.2.8 directly from upstream. The optional curated database is downloaded and formatted separately. The installer verifies upstream archive checksums.
 
-- A working conda installation (Miniconda or Mambaforge recommended)
-- Operating system: Linux, macOS, or Windows
-- R >= 4.2
-- Internet access for initial installation
-- Sufficient disk space for local BLAST/DIAMOND databases
+### Verify and launch
 
----
+Open LocAlignR using its Start menu entry or optional desktop shortcut. The Diagnostics tab reports detected engine paths and versions. If installation fails, inspect the Inno Setup log in `%TEMP%` (look for `Setup Log ... .txt`).
 
-## Conda
+To verify the downloaded installer checksum in PowerShell, from the extracted download directory:
 
-Check conda is available:
+```powershell
+Get-FileHash -Algorithm SHA256 -Path .\LocAlignR-0.2.1-Windows-x86_64-Setup.exe
+Get-Content .\SHA256SUMS.txt
+```
 
-conda --version
+Compare the hashes for the same filename. A checksum does not substitute for a trusted signature. The current installer is unsigned; on managed machines, request IT approval if SmartScreen blocks it. Do not disable security protections.
 
-### Recommended: clean environment (fully reproducible)
+### Uninstall
 
-Create a dedicated environment for LocAlign:
+Close LocAlignR, then select LocAlignR in Windows Settings > Apps > Installed apps > Uninstall. Alternatively run `%LOCALAPPDATA%\LocAlignR\unins000.exe` if present. The uninstaller removes the dedicated runtime and offers to remove installer-owned private Miniforge. It preserves external Conda installations and separately stored databases and registry. Back up data before uninstalling.
 
-conda create -n localign -y
-conda activate localign
+## macOS
 
-### Required channels (critical)
+Use the macOS installer archive from GitHub Releases. Extract it and open **LocAlignR Installer.app**; follow the Terminal prompts. The same script-based installer supports Apple Silicon and Intel and selects the appropriate Miniforge bootstrap when needed. It installs a named `localignr` Conda environment and can create a launcher in `~/Applications/LocAlignR.app`. Existing Conda is reused when detected. No administrator privileges are normally needed for user-local installation.
 
-LocAlign depends on:
+If a managed computer blocks the app, consult IT. For runtime errors, inspect the Terminal output and, if a launcher was created, `~/Library/Logs/LocAlignR/launcher.log`.
 
-- conda-forge for R and R packages
+To uninstall a dedicated macOS runtime, close LocAlignR and confirm the environment is not shared, then run `conda env remove -n localignr`. Remove the LocAlignR launcher from `~/Applications` if desired. Preserve any databases, configuration and Conda installations you still need.
 
-- bioconda for BLAST and DIAMOND
+## Linux and manual macOS installation
 
-Channel order matters and must be:
+Install [Miniforge](https://github.com/conda-forge/miniforge) if Conda is not available. Create a fresh named environment without changing global channel configuration:
 
-1) conda-forge
-
-2) bioconda
-
-3) defaults
-
-Set this once:
-
-conda config --add channels defaults
-conda config --add channels bioconda
-conda config --add channels conda-forge
-conda config --set channel_priority strict
-
-
-Verify:
-
-conda config --show channels
-
-
-Expected order:
-
-channels:
-  - conda-forge
-  - bioconda
-  - defaults
-
----
-
-## Install LocAlign
-
-Install LocAlign using explicit channels to ensure reproducibility:
-
-conda install --override-channels \
-  -c conda-forge \
-  -c bioconda \
-  -c defaults \
-  r-localign
-
-
-This will install:
-
-- LocAlign (R package)
-
-- R (via conda-forge)
-
-- BLAST+ (via bioconda)
-
-- DIAMOND (via bioconda)
-
-- All required R dependencies
-
----
-
-## Verify installation
-
-### Check BLAST availability
+```bash
+conda create -n localignr -y --override-channels --strict-channel-priority \
+  -c conda-forge -c bioconda -c franciscolobo \
+  r-localignr=0.2.1 r-jsonlite
+conda activate localignr
 blastp -version
 makeblastdb -version
-
-Both commands should return version information.
-
-### Check DIAMOND availability
 diamond version
+R -e 'LocAlignR::run_app()'
+```
 
-### Launch LocAlign
-R -e "LocAlign::run_app()"
+The package installs R, required R packages and alignment engines. The explicit `r-jsonlite` requirement covers the current published recipe's missing direct dependency. Do not install the two LocAlignR Conda variants in the same environment.
 
+## Tool discovery and configuration
 
-The Shiny application should open in your browser.
+LocAlignR checks `PATH` first. If a tool cannot be found there, it can use a corresponding environment variable: `LOCALIGN_BLASTP`, `LOCALIGN_BLASTN`, `LOCALIGN_BLASTX`, `LOCALIGN_TBLASTN`, `LOCALIGN_TBLASTX`, `LOCALIGN_MAKEBLASTDB` or `LOCALIGN_DIAMOND`. These are normally unnecessary.
 
-### Notes on environment variables (optional)
+The Diagnostics tab reports the detected paths. User preferences and the database registry reside in the platform-specific R user configuration directory. Obtain it in R with:
 
-By default, LocAlign discovers tools from the active conda environment (PATH).
+```r
+tools::R_user_dir("LocAlignR", "config")
+LocAlignR::localignr_log_file()
+```
 
-Advanced users may override tool paths using environment variables:
-
-LOCALIGN_BLASTP
-
-LOCALIGN_BLASTN
-
-LOCALIGN_BLASTX
-
-LOCALIGN_TBLASTN
-
-LOCALIGN_MAKEBLASTDB
-
-LOCALIGN_DIAMOND
-
-Example:
-
-export LOCALIGN_MAKEBLASTDB=/custom/path/makeblastdb
-
-
-This is **not required** for standard conda installs.
-
----
-
-## Platform-specific notes
-
-### macOS (Apple Silicon)
-
-All dependencies are provided via conda-forge and bioconda. No Rosetta setup is required.
-
-### Windows
-
-Use the conda prompt (Anaconda Prompt or Miniforge Prompt). All tools are installed as .exe binaries and are automatically detected.
-
----
-
-## Troubleshooting
-
-If installation fails:
-
-1) Confirm channel order:
-
-conda config --show channels
-
-
-2) Retry install with explicit channels:
-
-conda install --override-channels \
-  -c conda-forge -c bioconda -c defaults r-localign
-
-
-3) Ensure the environment is activated:
-
-conda activate localign
-
----
-
-## Alternative installation methods
-
-Installing LocAlign without conda is not recommended and is unsupported for full functionality, as BLAST and DIAMOND must be available on PATH.
-
-This installation procedure is fully reproducible and is the only supported installation method for LocAlign.
-
+Review logs before sharing them. Use local registered databases for offline/private searches; selecting remote BLAST `nr` or `nt` sends queries to NCBI.

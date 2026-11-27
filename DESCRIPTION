@@ -26,7 +26,13 @@ Imports:
     digest,
     htmltools,
     htmlwidgets,
-    openxlsx
+    openxlsx,
+    jsonlite,
+    Rcpp,
+    later,
+    promises,
+    httpuv,
+    rlang
 Suggests:
     pkgload,
     testthat (>= 3.0.0)

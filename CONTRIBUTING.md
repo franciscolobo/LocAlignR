@@ -1,8 +1,8 @@
-# Contributing to LocAlign
+# Contributing to LocAlignR
 
-Thank you for your interest in contributing to LocAlign.
+Thank you for your interest in contributing to LocAlignR.
 
-LocAlign is a GitHub-hosted Shiny application distributed primarily via conda. Contributions that improve robustness, usability, documentation, or functionality are welcome.
+LocAlignR is a GitHub-hosted Shiny application distributed primarily via conda. Contributions that improve robustness, usability, documentation, or functionality are welcome.
 
 ---
 
@@ -30,7 +30,7 @@ When reporting bugs, include:
 
 - Your operating system
 
-- How LocAlign was installed (conda environment name, if applicable)
+- How LocAlignR was installed (conda environment name, if applicable)
 
 - Output from the Diagnostics tab (tool paths and versions)
 
@@ -60,7 +60,7 @@ If you would like to submit code changes:
 
 ### Development guidelines
 
-Treat LocAlign as an application, not a general-purpose R package
+Treat LocAlignR as an application, not a general-purpose R package
 
 - Keep Shiny UI logic inside inst/app/
 
@@ -68,7 +68,7 @@ Treat LocAlign as an application, not a general-purpose R package
 
 - Do not commit large datasets, databases, or generated outputs
 
-- Do not vendor external tools (BLAST, DIAMOND); these are provided via conda
+- Do not vendor external tools (BLAST, DIAMOND); these are provided via Conda on macOS/Linux and official upstream downloads on Windows
 
 - Update documentation when behavior, interfaces, or installation steps change
 
@@ -76,7 +76,7 @@ Treat LocAlign as an application, not a general-purpose R package
 
 ### Dependencies and installation
 
-LocAlign is intended to be installed via conda.
+LocAlignR is intended to be installed via conda.
 Pull requests that require new dependencies should explain:
 
 - Why the dependency is needed
@@ -89,12 +89,10 @@ Pull requests that require new dependencies should explain:
 
 ## License
 
-By contributing to LocAlign, you agree that your contributions will be licensed under the project’s license (MIT).
+By contributing to LocAlignR, you agree that your contributions will be licensed under the project’s license (MIT).
 
 ---
 
 ## Contact and discussion
 
 If you are uncertain about how to proceed, opening an issue for discussion is always appropriate.
-
-

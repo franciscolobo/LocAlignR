@@ -32,6 +32,12 @@ requirements:
     - r-htmltools
     - r-htmlwidgets
     - r-openxlsx
+    - r-jsonlite
+    - r-rcpp
+    - r-later
+    - r-promises
+    - r-httpuv
+    - r-rlang
   run:
     - r-base >=4.2.0
     - r-shiny
@@ -49,6 +55,12 @@ requirements:
     - r-htmltools
     - r-htmlwidgets
     - r-openxlsx
+    - r-jsonlite
+    - r-rcpp
+    - r-later
+    - r-promises
+    - r-httpuv
+    - r-rlang
     - blast >=2.12.0
     - diamond >=2.0.0
 
@@ -69,7 +81,7 @@ test:
 
 about:
   home: https://github.com/franciscolobo/LocAlignR
-  license: GPL-3.0-or-later
+  license: MIT
   license_file: LICENSE
   summary: 'Local alignment visualization and analysis tool'
 
