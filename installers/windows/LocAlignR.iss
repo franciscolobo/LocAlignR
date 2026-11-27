@@ -71,26 +71,62 @@ var
   DBPage: TInputDirWizardPage;
   DownloadPage: TDownloadWizardPage;
   Prepared: Boolean;
+  ProgressPage: TOutputMarqueeProgressWizardPage;
+  CurrentStage: String;
+  ProgressVisible: Boolean;
 
 function Q(const S: String): String;
 begin
   Result := '"' + S + '"';
 end;
 
+procedure CommandOutput(const S: String; const Error, FirstLine: Boolean);
+var Line: String;
+begin
+  { Retain full output in the setup or uninstall log. }
+  Log(S);
+  if ProgressVisible then begin
+    Line := Trim(S);
+    if Line <> '' then begin
+      if Length(Line) > 100 then Line := Copy(Line, 1, 97) + '...';
+      ProgressPage.SetText(CurrentStage, Line);
+    end;
+  end;
+end;
+
 procedure RunChecked(const Exe, Args, WorkDir: String);
 var RC: Integer;
 begin
   Log('Executing: ' + Exe + ' ' + Args);
-  if not ExecAndLogOutput(Exe, Args, WorkDir, SW_HIDE, ewWaitUntilTerminated, RC, nil) then
-    RaiseException('Cannot start ' + Exe + ': ' + SysErrorMessage(RC));
-  if RC <> 0 then
-    RaiseException(Exe + ' exited with code ' + IntToStr(RC) + '. See the installation log for details.');
+  { The page is created only by InitializeWizard, not by the uninstaller. }
+  ProgressVisible := False;
+  if not IsUninstaller then begin
+    if not WizardSilent then begin
+      ProgressPage.SetText(CurrentStage, 'Running ' + ExtractFileName(Exe) + '...');
+      ProgressPage.Show;
+      ProgressVisible := True;
+    end;
+  end;
+  try
+    if ProgressVisible then ProgressPage.Animate;
+    if not ExecAndLogOutput(Exe, Args, WorkDir, SW_HIDE,
+      ewWaitUntilTerminated, RC, @CommandOutput) then
+      RaiseException('Cannot start ' + Exe + ': ' + SysErrorMessage(RC));
+    if RC <> 0 then
+      RaiseException(Exe + ' exited with code ' + IntToStr(RC) + '. See the installation log for details.');
+  finally
+    if ProgressVisible then begin
+      ProgressVisible := False;
+      ProgressPage.Hide;
+    end;
+  end;
 end;
 
 procedure SetStage(const S: String);
 begin
+  CurrentStage := S;
   WizardForm.PreparingLabel.Caption := S + #13#10 + #13#10 +
-    'Please wait. This step may take several minutes.';
+    'This step may take several minutes.';
   Log(S);
 end;
 
@@ -122,6 +158,8 @@ begin
     'Databases are stored separately and are preserved when LocAlignR is uninstalled.', False, '');
   DBPage.Add('');
   DBPage.Values[0] := ExpandConstant('{localappdata}\{#AppFolder}-databases');
+  ProgressPage := CreateOutputMarqueeProgressPage('Installing LocAlignR',
+    'The progress bar indicates activity. The latest command output is shown below.');
   DownloadPage := CreateDownloadPage('Downloading files', 'Please wait while the requested files are downloaded.', nil);
 end;
 
@@ -244,6 +282,7 @@ begin
   if DirExists(Dest) then RaiseException('Database directory already exists: ' + Dest + '. Choose another parent or inspect the existing database first.');
   TarExe := ExpandConstant('{sys}\tar.exe');
   if not FileExists(TarExe) then RaiseException('Windows tar.exe is required for database installation.');
+  SetStage('Downloading ' + L[I+1] + '...');
   Fetch(L[I+4], L[I+3], L[I+5]);
   Archive := ExpandConstant('{tmp}\') + L[I+3];
   if not ForceDirectories(Dest) then RaiseException('Cannot create ' + Dest);
