@@ -705,7 +705,7 @@ create_gui_launcher() {
 
   mkdir -p "$macos" || die "Failed to create ~/Applications."
 
-  local app_version="${APP_VERSION:-0.2.0}"
+  local app_version="${APP_VERSION:-0.2.1}"
   local install_bin=""
 
   install_bin="$(normalize_conda_bin "${CONDA_BIN:-}" || true)"

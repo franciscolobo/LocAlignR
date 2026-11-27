@@ -3,6 +3,8 @@
 import argparse
 import gzip
 import re
+import sys
+from pathlib import Path
 
 
 FIELD_RE = re.compile(r"\s([A-Z]{2})=")
@@ -84,7 +86,7 @@ def parse_uniprot_header(header):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Convert UniProt FASTA headers into a LocAlignR metadata TSV."
+        description="Convert UniProt FASTA headers into a LocAlignR metadata TSV and taxonomy maps."
     )
 
     parser.add_argument(
@@ -97,7 +99,16 @@ def main():
         help="Output TSV file"
     )
 
+    parser.add_argument("--blast-map", help="BLAST taxonomy map output path")
+    parser.add_argument("--diamond-map", help="DIAMOND taxonomy map output path")
     args = parser.parse_args()
+
+    stem = Path(args.output).with_suffix("")
+    blast_map = Path(args.blast_map or f"{stem}.blast_taxid_map.tsv")
+    diamond_map = Path(args.diamond_map or f"{stem}.diamond_taxid_map.tsv")
+    paths = [Path(args.fasta), Path(args.output), blast_map, diamond_map]
+    if len({p.resolve() for p in paths}) != len(paths):
+        parser.error("Input and output paths must be distinct.")
 
     columns = [
         "id",
@@ -113,7 +124,14 @@ def main():
         "raw_header",
     ]
 
-    with open_maybe_gzip(args.fasta) as infile, open(args.output, "w") as outfile:
+    total = mapped = skipped = duplicates = 0
+    seen = {}
+    with open_maybe_gzip(args.fasta) as infile, \
+         open(args.output, "w") as outfile, \
+         open(blast_map, "w", newline="\n") as blast_out, \
+         open(diamond_map, "w", newline="\n") as diamond_out:
+
+        diamond_out.write("accession\taccession.version\ttaxid\tgi\n")
 
         outfile.write("\t".join(columns) + "\n")
 
@@ -129,6 +147,38 @@ def main():
             ]
 
             outfile.write("\t".join(values) + "\n")
+
+            total += 1
+            taxid = record["taxid"]
+            accession = record["accession"]
+            if (record["db"] not in ("sp", "tr") or not accession
+                    or not re.fullmatch(r"[1-9][0-9]*", taxid)):
+                skipped += 1
+                continue
+
+            # BLAST uses the complete FASTA identifier; DIAMOND's default
+            # accession parser extracts the middle field of UniProt IDs.
+            previous = seen.get(accession)
+            if previous is not None and previous != taxid:
+                raise SystemExit(f"Conflicting TaxIDs for {accession}: "
+                                 f"{previous} and {taxid}. Outputs are incomplete.")
+            blast_out.write(f"{record['id']}\t{taxid}\n")
+            if previous is None:
+                diamond_out.write(f"{accession}\t{accession}\t{taxid}\t0\n")
+                seen[accession] = taxid
+            else:
+                duplicates += 1
+            mapped += 1
+
+    print(f"FASTA records: {total}; mapped: {mapped}; skipped: {skipped}; "
+          f"duplicate DIAMOND accessions: {duplicates}", file=sys.stderr)
+    print(f"Metadata: {args.output}\nBLAST map: {blast_map}\n"
+          f"DIAMOND map: {diamond_map}", file=sys.stderr)
+    if not mapped:
+        raise SystemExit("No valid taxonomy mappings generated.")
+    if skipped:
+        print("Warning: skipped records remain in metadata but have no taxonomy mapping.",
+              file=sys.stderr)
 
 
 if __name__ == "__main__":

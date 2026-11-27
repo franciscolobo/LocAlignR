@@ -44,6 +44,26 @@ Administrator privileges are not required by the installer itself. Institutional
 
 Download and extract the macOS installer ZIP appropriate for your Mac. Open **LocAlignR Installer.app** and follow the Terminal prompts. The installer provisions Conda if necessary, installs the runtime and offers optional database provisioning and a launcher in `~/Applications`.
 
+#### macOS security warning
+
+The macOS installer is currently distributed without Apple Developer ID signing and notarization. Consequently, macOS may display the following warning when opening the downloaded installer:
+
+- Apple could not verify “LocAlignR Installer” is free of malware that may harm your Mac or compromise your privacy.
+
+After verifying the downloaded archive against the published SHA-256 checksum:
+
+1. Click **Done**.
+2. Open **System Settings → Privacy & Security**.
+3. Scroll down to the **Security** section.
+4. Click **Open Anyway** next to the message concerning LocAlignR Installer.
+5. Confirm your decision and proceed with the installation.
+
+This authorizes the specific installer without disabling macOS security protections globally.
+
+On institutionally managed computers, this option may be unavailable. Contact your IT administrator if installation is restricted.
+
+For additional information, consult [Apple's official documentation](https://support.apple.com/en-us/102445).
+
 ### Linux / manual Conda installation on macOS
 
 With Conda or Miniforge available, run:

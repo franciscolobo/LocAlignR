@@ -65,8 +65,8 @@ mkdir -p "$DIST"
 cd "$DIST"
 
 for ZIP_NAME in \
-  "LocAlignR-Installer-macOS-arm64.zip" \
-  "LocAlignR-Installer-macOS-x86_64.zip"
+  "LocAlignR-0.2.1-macOS-arm64.zip" \
+  "LocAlignR-0.2.1-macOS-x86_64.zip"
 do
   rm -f "$ZIP_NAME"
   ditto -c -k --sequesterRsrc --keepParent "LocAlignR Installer.app" "$ZIP_NAME"
@@ -76,5 +76,5 @@ cd "$ROOT"
 
 echo "Built:"
 echo "  $APP"
-echo "  $DIST/LocAlignR-Installer-macOS-arm64.zip"
-echo "  $DIST/LocAlignR-Installer-macOS-x86_64.zip"
+echo "  $DIST/LocAlignR-Installer-0.2.1-macOS-arm64.zip"
+echo "  $DIST/LocAlignR-Installer-0.2.1-macOS-x86_64.zip"
