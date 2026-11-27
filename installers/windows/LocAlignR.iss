@@ -1,6 +1,6 @@
 ; Compile with Inno Setup 6.3+ or 7. No PowerShell required.
-; Default build uses an isolated upstream-download test installation. Set Development to 0 for release.
-#define Development 1
+; Production build. Set Development to 1 for isolated development testing.
+#define Development 0
 #define ForcePrivateConda 0
 #define AppVersion "0.2.1"
 #if ForcePrivateConda && !Development
