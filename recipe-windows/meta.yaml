@@ -1,0 +1,71 @@
+{% set name = "r-localignr-windows" %}
+{% set version = "0.2.1" %}
+{% set build = 0 %}
+
+package:
+  name: {{ name|lower }}
+  version: {{ version }}
+
+source:
+  path: ..
+
+build:
+  number: {{ build }}
+  noarch: generic
+  script: R CMD INSTALL . --no-multiarch
+
+requirements:
+  host:
+    - r-base >=4.2.0
+    - r-shiny
+    - r-rappdirs
+    - r-shinythemes
+    - r-dt
+    - r-shinyfiles
+    - r-shinybusy
+    - r-xml
+    - r-plyr
+    - r-dplyr
+    - r-yaml
+    - r-processx
+    - r-digest
+    - r-htmltools
+    - r-htmlwidgets
+    - r-openxlsx
+    - r-jsonlite
+  run:
+    - r-base >=4.2.0
+    - r-shiny
+    - r-rappdirs
+    - r-shinythemes
+    - r-dt
+    - r-shinyfiles
+    - r-shinybusy
+    - r-xml
+    - r-plyr
+    - r-dplyr
+    - r-yaml
+    - r-processx
+    - r-digest
+    - r-htmltools
+    - r-htmlwidgets
+    - r-openxlsx
+    - r-jsonlite
+
+test:
+  commands:
+    - >-
+      $R --vanilla -e
+      "library('LocAlignR');
+      stopifnot(as.character(packageVersion('LocAlignR')) == '{{ version }}');
+      stopifnot(is.function(LocAlignR::run_app))"
+
+about:
+  home: https://github.com/franciscolobo/LocAlignR
+  license: GPL-3.0-or-later
+  license_file: LICENSE
+  summary: 'LocAlignR application for the Windows installer; alignment engines provisioned separately'
+
+extra:
+  recipe-maintainers:
+    - franciscolobo
