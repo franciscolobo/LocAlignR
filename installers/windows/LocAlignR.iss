@@ -1,7 +1,11 @@
 ; Compile with Inno Setup 6.3+ or 7. No PowerShell required.
 ; Default build uses an isolated upstream-download test installation. Set Development to 0 for release.
 #define Development 1
+#define ForcePrivateConda 0
 #define AppVersion "0.2.1"
+#if ForcePrivateConda && !Development
+  #error ForcePrivateConda is only for development builds.
+#endif
 #if Development
   #define AppTitle "LocAlignR (Upstream Download Test)"
   #define AppFolder "LocAlignR-upstream-test"
@@ -56,7 +60,6 @@ Name: "{userdesktop}\{#AppTitle}"; Filename: "{cmd}"; Parameters: "/D /C """"{ap
 Filename: "{cmd}"; Parameters: "/D /C """"{app}\launch.cmd"""""; Description: "Launch LocAlignR"; Flags: postinstall nowait skipifsilent unchecked
 [UninstallDelete]
 Type: files; Name: "{app}\launch.cmd"
-Type: files; Name: "{app}\conda-path.txt"
 Type: dirifempty; Name: "{app}\envs"
 [Code]
 const
@@ -74,6 +77,7 @@ var
   ProgressPage: TOutputMarqueeProgressWizardPage;
   CurrentStage: String;
   ProgressVisible: Boolean;
+  RemovePrivateConda: Boolean;
 
 function Q(const S: String): String;
 begin
@@ -186,8 +190,12 @@ begin
   Root := ExpandConstant('{app}\miniforge3');
   CondaExe := Root + '\Scripts\conda.exe';
   if FileExists(CondaExe) then Exit;
+#if ForcePrivateConda
+  Log('Development test: ignoring external Conda installations.');
+#else
   CondaExe := ExistingConda();
   if CondaExe <> '' then Exit;
+#endif
   if DirExists(Root) then RaiseException('Incomplete Miniforge directory: ' + Root);
   Fetch(MFURL, 'miniforge-bootstrap.exe', MFSHA);
   { NSIS /D must be last and unquoted, even when the path contains spaces. }
@@ -196,6 +204,9 @@ begin
     '/InstallationType=JustMe /RegisterPython=0 /AddToPath=0 /S /D=' + Root, ExpandConstant('{tmp}'));
   CondaExe := Root + '\Scripts\conda.exe';
   if not FileExists(CondaExe) then RaiseException('Miniforge did not create conda.exe');
+  if not SaveStringToFile(ExpandConstant('{app}\miniforge-owned.txt'),
+    'LocAlignR private Miniforge v1', False) then
+    RaiseException('Cannot record Miniforge ownership.');
 end;
 
 procedure InstallEnvironment();
@@ -229,6 +240,9 @@ begin
   end;
   SetStage('Installing LocAlignR and R dependencies...');
   RunChecked(CondaExe, A + ' --prefix ' + Q(EnvPrefix) + ' --yes' + Channels + Packages, ExpandConstant('{app}'));
+  if not SaveStringToFile(ExpandConstant('{app}\runtime-owned.txt'),
+    'LocAlignR runtime v1', False) then
+    RaiseException('Cannot record runtime ownership.');
 end;
 
 procedure InstallEngines();
@@ -355,22 +369,90 @@ begin
   end;
 end;
 
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var A: AnsiString; P: String;
+// Remove only the dedicated runtime. Never recursively delete the application directory.
+function OwnershipMatches(const Name, Expected: String): Boolean;
+var A: AnsiString;
 begin
-  if CurUninstallStep = usUninstall then begin
-    P := ExpandConstant('{app}\envs\localignr');
-    if FileExists(P + '\conda-meta\history') then begin
-      try
-        if not LoadStringFromFile(ExpandConstant('{app}\conda-path.txt'), A) then RaiseException('Saved Conda path missing');
-        CondaExe := String(A);
+  Result := False;
+  if LoadStringFromFile(ExpandConstant('{app}\') + Name, A) then
+    Result := Trim(String(A)) = Expected;
+end;
+
+function InitializeUninstall(): Boolean;
+var P, Root: String;
+begin
+  Result := True;
+  RemovePrivateConda := False;
+  P := ExpandConstant('{app}\envs\localignr');
+  if DirExists(P) and not OwnershipMatches('runtime-owned.txt', 'LocAlignR runtime v1') then begin
+    Log('Uninstall refused: runtime ownership marker missing.');
+    if not UninstallSilent then
+      MsgBox('Cannot verify ownership of the runtime. Reinstall this revision before uninstalling.', mbError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+  Root := ExpandConstant('{app}\miniforge3');
+  if DirExists(Root) and OwnershipMatches('miniforge-owned.txt', 'LocAlignR private Miniforge v1') then begin
+    if not UninstallSilent then
+      RemovePrivateConda := MsgBox('Also remove the private Miniforge installation?' + #13#10 +
+        Root + #13#10 + #13#10 +
+        'Choose No if you use it for other software. External Conda installations and databases are not removed.',
+        mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES;
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var A: AnsiString; P, Root, U: String;
+    RC: Integer;
+    RuntimeRemoved: Boolean;
+begin
+  if CurUninstallStep <> usUninstall then Exit;
+  P := ExpandConstant('{app}\envs\localignr');
+  Root := ExpandConstant('{app}\miniforge3');
+  RuntimeRemoved := not DirExists(P);
+  if not RuntimeRemoved then begin
+    try
+      if not OwnershipMatches('runtime-owned.txt', 'LocAlignR runtime v1') then
+        RaiseException('Runtime ownership marker missing.');
+      if FileExists(P + '\conda-meta\history') then begin
+        if not LoadStringFromFile(ExpandConstant('{app}\conda-path.txt'), A) then
+          RaiseException('Saved Conda path missing');
+        CondaExe := Trim(String(A));
         if not FileExists(CondaExe) then RaiseException('Saved Conda executable missing');
         RunChecked(CondaExe, 'env remove --prefix ' + Q(P) + ' --yes', ExpandConstant('{app}'));
-      except
-        Log('Environment removal failed: ' + GetExceptionMessage);
-        if not UninstallSilent then MsgBox('Environment retained at ' + P + #13#10 + GetExceptionMessage, mbInformation, MB_OK);
       end;
+      { Conda may leave untracked upstream executables and notices. }
+      if DirExists(P) then
+        if not DelTree(P, True, True, True) then
+          RaiseException('Some runtime files could not be removed. Close LocAlignR and R sessions.');
+      RuntimeRemoved := not DirExists(P);
+      if not RuntimeRemoved then RaiseException('Runtime directory still exists.');
+    except
+      Log('Environment removal failed: ' + GetExceptionMessage);
+      if not UninstallSilent then MsgBox('Runtime cleanup incomplete at ' + P + #13#10 +
+        GetExceptionMessage + #13#10 + 'Private Miniforge will be retained.', mbError, MB_OK);
     end;
-    { Never remove user database directories or registry. Private Miniforge is retained in this development revision. }
   end;
+  if RuntimeRemoved then begin
+    DeleteFile(ExpandConstant('{app}\runtime-owned.txt'));
+    DeleteFile(ExpandConstant('{app}\conda-path.txt'));
+  end;
+  if RuntimeRemoved and RemovePrivateConda and
+     OwnershipMatches('miniforge-owned.txt', 'LocAlignR private Miniforge v1') then begin
+    try
+      U := Root + '\Uninstall-Miniforge3.exe';
+      if not FileExists(U) then RaiseException('Official Miniforge uninstaller not found.');
+      { Use the upstream interactive uninstaller; do not request shared cache/config cleanup. }
+      Log('Starting private Miniforge uninstaller: ' + U);
+      if not Exec(U, '', ExpandConstant('{app}'), SW_SHOWNORMAL, ewWaitUntilTerminated, RC) then
+        RaiseException('Cannot launch Miniforge uninstaller: ' + SysErrorMessage(RC));
+      if (RC <> 0) or DirExists(Root) then
+        RaiseException('Miniforge cleanup not confirmed. Check the private installation directory.');
+      DeleteFile(ExpandConstant('{app}\miniforge-owned.txt'));
+    except
+      Log('Private Miniforge removal incomplete: ' + GetExceptionMessage);
+      if not UninstallSilent then MsgBox(GetExceptionMessage + #13#10 + Root, mbInformation, MB_OK);
+    end;
+  end;
+  { Preserve all databases, R user configuration and shared Conda installations. }
 end;
