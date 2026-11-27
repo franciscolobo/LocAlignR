@@ -1,0 +1,145 @@
+
+name: Build Windows Installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-installer:
+
+    runs-on: windows-2022
+
+    steps:
+
+      # --------------------------------------------------------
+      # Checkout LocAlignR repository
+      # --------------------------------------------------------
+
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      # --------------------------------------------------------
+      # Locate Inno Setup compiler
+      # --------------------------------------------------------
+
+      - name: Locate Inno Setup
+        shell: pwsh
+        run: |
+          $candidates = @(
+            "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
+            "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+          )
+
+          $compiler = $candidates |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+
+          if (-not $compiler) {
+            $command = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+
+            if ($command) {
+              $compiler = $command.Source
+            }
+          }
+
+          if (-not $compiler) {
+            throw "Inno Setup compiler was not found."
+          }
+
+          Write-Host "Inno Setup compiler: $compiler"
+
+          "ISCC_PATH=$compiler" >> $env:GITHUB_ENV
+
+      # --------------------------------------------------------
+      # Compile Windows installer
+      # --------------------------------------------------------
+
+      - name: Compile installer
+        shell: pwsh
+        run: |
+          $script = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "installers\windows\LocAlignR.iss"
+
+          $output = Join-Path `
+            $env:GITHUB_WORKSPACE `
+            "windows-installer-output"
+
+          if (-not (Test-Path $script)) {
+            throw "Installer source file was not found: $script"
+          }
+
+          New-Item `
+            -ItemType Directory `
+            -Path $output `
+            -Force | Out-Null
+
+          & $env:ISCC_PATH "/O$output" $script
+
+          if ($LASTEXITCODE -ne 0) {
+            throw "Inno Setup compilation failed."
+          }
+
+      # --------------------------------------------------------
+      # Verify generated installer
+      # --------------------------------------------------------
+
+      - name: Verify installer
+        shell: pwsh
+        run: |
+          $installers = @(
+            Get-ChildItem `
+              -Path "windows-installer-output" `
+              -Filter "*.exe" `
+              -File
+          )
+
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one installer executable."
+          }
+
+          $installers |
+            Select-Object Name, Length, LastWriteTime |
+            Format-Table
+
+      # --------------------------------------------------------
+      # Generate SHA256 checksum
+      # --------------------------------------------------------
+
+      - name: Generate SHA256 checksum
+        shell: pwsh
+        run: |
+          Set-Location windows-installer-output
+
+          Get-ChildItem -Filter "*.exe" -File |
+            ForEach-Object {
+              $hash = Get-FileHash `
+                -Path $_.FullName `
+                -Algorithm SHA256
+
+              "$($hash.Hash.ToLower())  $($_.Name)" |
+                Out-File `
+                  -FilePath SHA256SUMS.txt `
+                  -Encoding ascii `
+                  -Append
+            }
+
+          Get-Content SHA256SUMS.txt
+
+      # --------------------------------------------------------
+      # Preserve installer as GitHub Actions artifact
+      # --------------------------------------------------------
+
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: LocAlignR-Windows-Installer
+          path: |
+            windows-installer-output/*.exe
+            windows-installer-output/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
+
