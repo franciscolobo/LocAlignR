@@ -74,6 +74,9 @@ for (.f in c(
   "10_search_strategy.R",
   "11_user_preferences.R",
   "12_job_report.R",
+  "13_taxonomy.R",
+  "14_taxonomy_build.R",
+  "15_taxonomy_search.R",
   "90_diagnostics.R",
   "91_databases.R"
 )) {

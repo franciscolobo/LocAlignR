@@ -37,6 +37,7 @@ build_shinyfiles_volumes <- function() {
 #'   tempfile). Use this when the aligner itself doesn't write output via
 #'   its own `-out`/`--out` flag.
 #'
+#' @param env Optional child-process environment (NULL inherits the parent).
 #' @return list(status, stdout, stderr, timed_out), shaped like the relevant
 #'   fields of processx::run()'s result.
 run_process_with_progress <- function(
@@ -46,7 +47,8 @@ run_process_with_progress <- function(
     progress_text = "Running...",
     poll_interval = 0.4,
     tau = NULL,
-    stdout_file = NULL
+    stdout_file = NULL,
+    env = NULL
 ) {
   tau <- tau %||% max(5, timeout_sec / 4)
 
@@ -58,6 +60,7 @@ run_process_with_progress <- function(
     args = args,
     stdout = stdout_file,
     stderr = stderr_file,
+    env = env,
     cleanup = TRUE
   )
 

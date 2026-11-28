@@ -7,7 +7,8 @@ main <- function() {
   on.exit(unlink(root, recursive = TRUE), add = TRUE)
   env <- new.env(parent = globalenv())
   for (f in c("00_utils.R", "02_user_db_registry.R", "13_taxonomy.R",
-              "14_taxonomy_build.R", "07_makeseqdb.R")) {
+              "14_taxonomy_build.R", "07_makeseqdb.R", "15_taxonomy_search.R",
+              "05_blast_run.R", "06_diamond_run.R", "08_aligner_dispatch.R")) {
     sys.source(file.path("inst/app/R", f), envir = env)
   }
   env$user_db_file <- file.path(root, "user_dbs.yml")
@@ -61,6 +62,31 @@ main <- function() {
     self <- hits[grepl(acc, hits[[1]], fixed = TRUE) & grepl(acc, hits[[2]], fixed = TRUE), , drop = FALSE]
     stopifnot(nrow(self) >= 1L, all(self[[3]] == expected[i]))
   }
-  cat("\nPASS: conventional BLAST, taxonomy BLAST, taxonomy DIAMOND, registry persistence and native TaxIDs.\n")
+  # Exercise the actual XML runners without a Shiny progress modal.
+  env$run_process_with_progress <- function(command, args, timeout_sec, progress_text, env = NULL) {
+    res <- processx::run(command, args, env = env, error_on_status = FALSE,
+                         timeout = timeout_sec * 1000)
+    res$timed_out <- FALSE
+    res
+  }
+  for (backend in c("BLAST", "DIAMOND")) {
+    row <- if (backend == "BLAST") b else d
+    db_res <- env$resolve_db_selection(row$name, saved, "blastp", backend)
+    for (mode in c("include", "exclude")) {
+      # Primates (non-leaf) includes human but not mouse.
+      filter <- env$localignr_taxonomy_search_config(
+        env$localignr_taxonomy_filter(mode, "9443"), db_res)
+      xml <- env$run_aligner_as_xml(backend, "blastp", fasta, row$path, 1e-5,
+        params = list(threads = 1L, taxonomy_filter = filter))
+      hits <- XML::xpathSApply(xml, "//Hit", function(hit) {
+        paste(XML::xmlValue(hit[["Hit_id"]]), XML::xmlValue(hit[["Hit_def"]]))
+      })
+      want <- if (mode == "include") "P00001" else "P00002"
+      reject <- if (mode == "include") "P00002" else "P00001"
+      stopifnot(length(hits) > 0L, all(grepl(want, hits, fixed = TRUE)),
+                !any(grepl(reject, hits, fixed = TRUE)))
+    }
+  }
+  cat("\nPASS: conventional indexing, native TaxIDs, registry persistence, BLAST and DIAMOND descendant inclusion/exclusion in XML.\n")
 }
 main()

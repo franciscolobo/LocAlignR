@@ -59,6 +59,10 @@ run_diamond_as_xml <- function(mode, query, db, eval, params = list()) {
     "--outfmt", "5"
   )
 
+  if (!is.null(params$taxonomy_filter)) {
+    args <- c(args, localignr_taxonomy_search_args(params$taxonomy_filter, "diamond"))
+  }
+
   if (!identical(sensitivity, "default")) {
     args <- c(args, paste0("--", sensitivity))
   }

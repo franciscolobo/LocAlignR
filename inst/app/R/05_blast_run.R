@@ -80,6 +80,9 @@ build_blast_args <- function(prog, query, db, eval, remote, params = list(), out
     args <- c(args, "-num_threads", as.character(threads))
   }
 
+  if (!is.null(params$taxonomy_filter)) {
+    args <- c(args, localignr_taxonomy_search_args(params$taxonomy_filter, "blast", remote))
+  }
   args
 }
 
@@ -120,7 +123,8 @@ run_blast_as_xml <- function(prog, query, db, eval, remote, params = list()) {
     command       = prog_path,
     args          = args,
     timeout_sec   = timeout,
-    progress_text = sprintf("Running %s...", prog)
+    progress_text = sprintf("Running %s...", prog),
+    env = if (is.null(params$taxonomy_filter)) NULL else localignr_taxonomy_blast_env(params$taxonomy_filter)
   )
 
   message(sprintf("[BLAST] exit status=%s", res$status))

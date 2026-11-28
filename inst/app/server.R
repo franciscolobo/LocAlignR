@@ -32,6 +32,7 @@ source("R/11_user_preferences.R")
 source("R/12_job_report.R")
 source("R/13_taxonomy.R")
 source("R/14_taxonomy_build.R")
+source("R/15_taxonomy_search.R")
 
 source("R/90_diagnostics.R", local = TRUE)
 source("R/91_databases.R", local = TRUE)
@@ -166,6 +167,32 @@ server <- function(input, output, session) {
     allowed_db_choices = allowed_db_choices
   )
  
+  taxonomy_search_available <- reactive({
+    reg <- normalize_registry_df(db_registry())
+    if (length(input$db) != 1L || is.na(input$db) || !nzchar(input$db) || input$db %in% c("nr", "nt")) return(FALSE)
+    row <- reg[reg$name == input$db & reg$backend == tolower(input$aligner %||% "BLAST"), , drop = FALSE]
+    nrow(row) == 1L && isTRUE(row$has_taxonomy[1])
+  })
+  output$taxonomy_search_available <- reactive(taxonomy_search_available())
+  outputOptions(output, "taxonomy_search_available", suspendWhenHidden = FALSE)
+  output$taxonomy_search_status <- renderUI({
+    if (taxonomy_search_available()) return(tags$small("Taxonomy-aware local database."))
+    if (!identical(input$taxonomy_search_mode %||% "none", "none"))
+      return(tags$small(class = "text-danger", "Selected database does not support taxonomy filtering. Select None or change database."))
+    NULL
+  })
+  collect_taxonomy_search <- function(db_res) {
+    tryCatch({
+      filter <- localignr_taxonomy_filter(input$taxonomy_search_mode, input$taxonomy_search_ids)
+      localignr_taxonomy_search_config(filter, db_res)
+    }, error = function(e) shiny::validate(shiny::need(FALSE, conditionMessage(e))))
+  }
+  restore_taxonomy_search <- function(params) {
+    filter <- params$taxonomy_filter
+    updateSelectInput(session, "taxonomy_search_mode", selected = filter$mode %||% "none")
+    updateTextInput(session, "taxonomy_search_ids", value = paste(filter$ids %||% character(), collapse = ", "))
+  }
+
   # Search strategy import is applied asynchronously after dynamic UI updates.
   pending_strategy <- reactiveVal(NULL)
   
@@ -177,7 +204,7 @@ server <- function(input, output, session) {
   
   # ---- Helper: update parameter inputs from a named parameter list ----
   apply_parameter_values <- function(params) {
-    for (nm in names(params)) {
+    for (nm in setdiff(names(params), "taxonomy_filter")) {
       id <- aligner_param_input_id(nm)
       val <- params[[nm]]
       
@@ -191,6 +218,7 @@ server <- function(input, output, session) {
   
   # ---- Helper: persist current UI/search settings ----
   save_current_preferences <- function(params) {
+    if (!is.null(params$taxonomy_filter)) params$taxonomy_filter$directory <- NULL
     prefs <- build_current_preferences(input, params = params)
     save_user_preferences(prefs)
     logf("[PREFS] Saved user preferences to %s", user_preferences_file)
@@ -273,6 +301,7 @@ server <- function(input, output, session) {
         session$onFlushed(function() {
           restored_param_values(user_prefs$parameters %||% list())
           apply_parameter_values(user_prefs$parameters %||% list())
+          restore_taxonomy_search(user_prefs$parameters %||% list())
           
           logf("[PREFS] Loaded user preferences from %s", user_preferences_file)
           restoring_preferences(FALSE)
@@ -319,7 +348,9 @@ server <- function(input, output, session) {
       aligner = input$aligner %||% "",
       program = input$program %||% "",
       db = input$db %||% "",
-      evalue = input$eval %||% ""
+      evalue = input$eval %||% "",
+      taxonomy_mode = input$taxonomy_search_mode %||% "none",
+      taxonomy_ids = if (identical(input$taxonomy_search_mode %||% "none", "none")) "" else input$taxonomy_search_ids %||% ""
     )
   })
   
@@ -408,13 +439,16 @@ server <- function(input, output, session) {
     )
 #    cat("[debug] 8. db_res: path=", db_res$db_path, " backend=", db_res$backend, " remote=", db_res$remote, "\n")
 
+    filter <- collect_taxonomy_search(db_res)
+    params$taxonomy_filter <- filter
+
     logf("[RUN] aligner=%s program=%s db=%s evalue=%s", aligner, prog, input$db, evalue)
 #    cat("[debug] 9. past logf\n")
 
     file_sig <- make_query_signature(input, use_upload = use_upload())
 #    cat("[debug] 10. file_sig computed (len=", nchar(file_sig), ")\n")
 
-    key <- digest::digest(list(aligner, prog, input$db, evalue, file_sig, params))
+    key <- digest::digest(list(aligner, prog, db_res$db_path, input$db, evalue, file_sig, params))
 #    cat("[debug] 11. cache key=", key, "\n")
 
     if (exists(key, envir = .cache, inherits = FALSE)) {
@@ -460,7 +494,7 @@ server <- function(input, output, session) {
   
   # ---- Apply uploaded search strategy after dynamic UI updates ----
   observeEvent(
-    list(input$aligner, input$aligner_preset),
+    list(input$aligner, input$aligner_preset, pending_strategy()),
     {
       # restore user parameters
       if (isTRUE(restoring_preferences())) {
@@ -500,10 +534,11 @@ server <- function(input, output, session) {
       )
       
       params <- strategy$parameters %||% list()
+      restore_taxonomy_search(params)
       
       session$onFlushed(function() {
         session$onFlushed(function() {
-          restored_param_values(params)          
+          restored_param_values(params)
           pending_strategy(NULL)
           showNotification("Search strategy loaded.", type = "message")
         }, once = TRUE)
@@ -639,6 +674,12 @@ server <- function(input, output, session) {
         program = program
       )
 
+      if (!identical(input$taxonomy_search_mode %||% "none", "none")) {
+        params$taxonomy_filter <- collect_taxonomy_search(resolve_db_selection(
+          input$db, db_registry(), program, aligner))
+      }
+      # Do not export machine-specific taxonomy paths.
+      if (!is.null(params$taxonomy_filter)) params$taxonomy_filter$directory <- NULL
       strategy <- build_search_strategy(
         input = input,
         params = params
@@ -675,6 +716,10 @@ server <- function(input, output, session) {
         program = input$program
       )
 
+      if (!identical(input$taxonomy_search_mode %||% "none", "none")) {
+        params$taxonomy_filter <- collect_taxonomy_search(resolve_db_selection(
+          input$db, db_registry(), input$program, toupper(input$aligner)))
+      }
       reg <- db_registry()
 
       db_row <- reg[

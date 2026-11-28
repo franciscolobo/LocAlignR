@@ -68,6 +68,18 @@ panel_run_aligner <- function() {
           choices = c("Mlig_core_nt", "Mlig_core_aa", "nt", "nr")
         ),
         
+        uiOutput("taxonomy_search_status"),
+        conditionalPanel(
+          "output.taxonomy_search_available || (input.taxonomy_search_mode && input.taxonomy_search_mode != 'none')",
+          selectInput("taxonomy_search_mode", "Taxonomy filter:",
+                      choices = c("None" = "none", "Include taxa" = "include", "Exclude taxa" = "exclude")),
+          conditionalPanel(
+            "input.taxonomy_search_mode != 'none'",
+            textInput("taxonomy_search_ids", "NCBI TaxIDs:", placeholder = "e.g. 40674, 8782"),
+            helpText("Separate TaxIDs with commas or spaces. Descendant taxa are included in each group.")
+          )
+        ),
+
         textInput(
           "eval",
           "e-value:",

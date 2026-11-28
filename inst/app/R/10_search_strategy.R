@@ -31,5 +31,10 @@ read_search_strategy <- function(path) {
     stop("Unsupported search strategy format.")
   }
   
+  if (!is.null(x$parameters$taxonomy_filter)) {
+    f <- x$parameters$taxonomy_filter
+    if (!is.list(f) || is.null(f$mode)) stop("Invalid taxonomy filter in search strategy.")
+    localignr_taxonomy_filter(f$mode, f$ids)
+  }
   x
 }
