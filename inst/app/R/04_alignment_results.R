@@ -216,7 +216,7 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   DT::datatable(
     display,
     colnames = unname(cols),
-    escape = which(names(display) != "hit_ID"),
+    escape = setdiff(c(" ", unname(cols)), "Hit ID"),    
     selection = "single",
     filter = "top",
     options = list(
@@ -402,7 +402,7 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
   widget <- DT::datatable(
     display,
     colnames = unname(cols),
-    escape = which(names(display) != "hit_ID"),
+    escape = setdiff(c(" ", unname(cols)), "Hit ID"),
     selection = "none",
     filter = "top",
     options = list(
