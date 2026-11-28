@@ -77,6 +77,7 @@ for (.f in c(
   "13_taxonomy.R",
   "14_taxonomy_build.R",
   "15_taxonomy_search.R",
+  "16_taxonomy_annotation.R",
   "90_diagnostics.R",
   "91_databases.R"
 )) {

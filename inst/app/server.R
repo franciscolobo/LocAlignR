@@ -33,6 +33,7 @@ source("R/12_job_report.R")
 source("R/13_taxonomy.R")
 source("R/14_taxonomy_build.R")
 source("R/15_taxonomy_search.R")
+source("R/16_taxonomy_annotation.R")
 
 source("R/90_diagnostics.R", local = TRUE)
 source("R/91_databases.R", local = TRUE)
@@ -311,31 +312,69 @@ server <- function(input, output, session) {
     }, once = TRUE)
   }, once = TRUE)
   
-  # ---- Metadata cache ----
+  # Bind annotation context to the result, not the live database selector.
+  result_db <- reactiveVal(NULL)
   metadata_cache <- new.env(parent = emptyenv())
-
-  subject_meta <- reactive({
-    req(input$db)
-
-    cache_key <- metadata_cache_key(input$db, db_registry())
-
-    if (exists(cache_key, envir = metadata_cache, inherits = FALSE)) {
-      logf("[META] Using cached metadata for DB: %s", input$db)
-      return(get(cache_key, envir = metadata_cache, inherits = FALSE))
+  taxonomy_cache <- new.env(parent = emptyenv())
+  selected_annotation_db <- function() {
+    reg <- normalize_registry_df(db_registry())
+    if (length(input$db) != 1L || input$db %in% c("nr", "nt")) return(NULL)
+    row <- reg[reg$name == input$db, , drop = FALSE]
+    if (nrow(row) == 1L) as.list(row[1L, ]) else NULL
+  }
+  taxonomy_index_for <- function(row) {
+    if (is.null(row) || !isTRUE(row$has_taxonomy)) return(NULL)
+    directory <- row$taxonomy_dir
+    if (length(directory) != 1L || is.na(directory) || !nzchar(directory)) stop("Missing taxonomy directory.")
+    if (!identical(taxonomy_cache$directory, directory)) {
+      if (!localignr_taxonomy_validate(directory)) stop("Missing or invalid taxonomy snapshot.")
+      index <- localignr_taxonomy_index(directory)
+      taxonomy_cache$index <- index
+      taxonomy_cache$directory <- directory
     }
-
-    shinybusy::show_modal_spinner(
-      spin = "fading-circle",
-      text = sprintf("Loading metadata for %s...", input$db)
-    )
-    on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
-
-    meta <- load_subject_meta_for_db(input$db, db_registry())
-    assign(cache_key, meta, envir = metadata_cache)
-
-    meta
+    taxonomy_cache$index
+  }
+  subject_meta <- reactive({
+    row <- result_db()
+    df <- parsedresults()
+    if (is.null(row)) return(empty_subject_meta())
+    path <- row$metadata_path
+    key <- if (length(path) == 1L && !is.na(path) && nzchar(path)) path else "NO_METADATA"
+    if (!exists(key, envir = metadata_cache, inherits = FALSE))
+      assign(key, load_subject_meta(path), envir = metadata_cache)
+    meta <- get(key, envir = metadata_cache, inherits = FALSE)
+    if (!isTRUE(row$has_taxonomy)) return(meta)
+    tryCatch({
+      mapping <- localignr_taxonomy_read_map(row$taxonomy_map_path)
+      localignr_taxonomy_annotate(df$hit_ID, meta, mapping, taxonomy_index_for(row))
+    }, error = function(e) {
+      showNotification(paste("Taxonomy annotation unavailable:", conditionMessage(e)), type = "warning")
+      meta
+    })
   })
-  
+  taxonomy_lookup <- eventReactive(input$taxonomy_lookup_run, {
+    tryCatch({
+      index <- taxonomy_index_for(selected_annotation_db())
+      if (is.null(index)) stop("Select a taxonomy-aware local database.")
+      localignr_taxonomy_find(input$taxonomy_lookup_query %||% "", index)
+    }, error = function(e) shiny::validate(shiny::need(FALSE, conditionMessage(e))))
+  })
+  output$taxonomy_lookup_results <- renderTable(taxonomy_lookup(), rownames = FALSE)
+  output$taxonomy_annotation_status <- renderText({
+    req(xml_current())
+    row <- result_db()
+    if (is.null(row)) return("No local annotation database associated with these results.")
+    paste("Annotation database:", row$name,
+          if (isTRUE(row$has_taxonomy)) paste("| Taxonomy snapshot:", row$taxonomy_snapshot) else "")
+  })
+  output$taxonomy_columns_ui <- renderUI({
+    cols <- grep("^taxon_", names(subject_meta()), value = TRUE)
+    if (!length(cols)) return(NULL)
+    checkboxGroupInput("taxonomy_result_columns", "Taxonomic columns",
+      choices = stats::setNames(cols, sub("^taxon_", "", cols)),
+      selected = intersect(c("taxon_id", "taxon_name"), cols), inline = TRUE)
+  })
+
   # ---- Alignment XML cache and current result state ----
   .cache <- new.env(parent = emptyenv())
  
@@ -454,6 +493,7 @@ server <- function(input, output, session) {
     if (exists(key, envir = .cache, inherits = FALSE)) {
 #      cat("[debug] 12. CACHE HIT -- returning cached result\n")
       xml <- get(key, envir = .cache, inherits = FALSE)
+      result_db(selected_annotation_db())
       xml_current(xml)
       last_run_signature(current_run_signature())
       save_current_preferences(params)
@@ -481,6 +521,7 @@ server <- function(input, output, session) {
 
     assign(key, xml, envir = .cache)
 
+    result_db(selected_annotation_db())
     xml_current(xml)
     last_run_signature(current_run_signature())
     save_current_preferences(params)
@@ -557,6 +598,8 @@ server <- function(input, output, session) {
     )
     
     xml <- XML::xmlParse(input$blast_xml$datapath, useInternalNodes = TRUE)
+    result_db(if (isTRUE(input$xml_use_selected_db)) selected_annotation_db() else NULL)
+    last_run_signature(NULL)
     xml_current(xml)
   })
   
@@ -590,7 +633,8 @@ server <- function(input, output, session) {
     )
     on.exit(shinybusy::remove_modal_spinner(), add = TRUE)
 
-    render_alignment_results_dt(df = df, subject_meta = subject_meta())
+    render_alignment_results_dt(df = df, subject_meta = subject_meta(),
+                                taxonomy_columns = input$taxonomy_result_columns %||% character())
   })
  
   # ---- Clicked row summary ----

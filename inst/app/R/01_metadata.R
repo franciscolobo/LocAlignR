@@ -119,3 +119,29 @@ build_text_row <- function(dfrow) {
   
   paste(sprintf("%s: %s", keep, vchr[keep]), collapse = "\n")
 }
+# Exact identifier first, then unambiguous UniProt accession or legacy alias.
+# Never expand an HSP row because multiple metadata records share an alias.
+localignr_match_subjects <- function(hits, ids) {
+  hits <- sub('[[:space:]].*$', '', as.character(hits))
+  ids <- as.character(ids)
+  unique_match <- function(x, keys) {
+    bad <- is.na(keys) | !nzchar(keys) | duplicated(keys) | duplicated(keys, fromLast = TRUE)
+    keys[bad] <- NA_character_
+    ans <- match(x, keys)
+    ans[is.na(x) | !nzchar(x)] <- NA_integer_
+    ans
+  }
+  accession <- function(x) sub('^(sp|tr)\\|([^|]+)\\|.*$', '\\2', x)
+  ans <- unique_match(hits, ids)
+  for (normalize in list(accession, canon_id)) {
+    missing <- is.na(ans)
+    ans[missing] <- unique_match(normalize(hits[missing]), normalize(ids))
+  }
+  ans
+}
+
+localignr_join_subject_meta <- function(df, meta) {
+  extra <- setdiff(names(meta), c('id', names(df)))
+  if (!length(extra)) return(df)
+  cbind(df, meta[localignr_match_subjects(df$hit_ID, meta$id), extra, drop = FALSE])
+}

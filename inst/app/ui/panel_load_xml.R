@@ -20,6 +20,7 @@ panel_load_xml <- function() {
       class = "panel-collapse collapse",
       div(
         class = "panel-body",
+        checkboxInput("xml_use_selected_db", "Use currently selected local database for metadata and taxonomy (must match XML source)", value = FALSE),
         fileInput("blast_xml", "Load alignment XML", accept = c(".xml")),
         tags$small(
           class = "text-muted",

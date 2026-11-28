@@ -10,6 +10,8 @@ main_tabs <- function() {
     tabPanel(
       "Alignment results",
       h4("Results"),
+      textOutput("taxonomy_annotation_status"),
+      uiOutput("taxonomy_columns_ui"),
       DTOutput("alignmentResults"),
       hr(),
       p("Alignment:", tableOutput("clicked")),

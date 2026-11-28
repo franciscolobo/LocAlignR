@@ -76,7 +76,10 @@ panel_run_aligner <- function() {
           conditionalPanel(
             "input.taxonomy_search_mode != 'none'",
             textInput("taxonomy_search_ids", "NCBI TaxIDs:", placeholder = "e.g. 40674, 8782"),
-            helpText("Separate TaxIDs with commas or spaces. Descendant taxa are included in each group.")
+            helpText("Separate TaxIDs with commas or spaces. Descendant taxa are included in each group."),
+            textInput("taxonomy_lookup_query", "Find scientific name or TaxID"),
+            actionButton("taxonomy_lookup_run", "Find taxa"),
+            tableOutput("taxonomy_lookup_results")
           )
         ),
 

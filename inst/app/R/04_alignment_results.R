@@ -149,13 +149,10 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   )
 }
 
-.render_blast_results_dt_impl <- function(df, subject_meta) {
-  df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
-  meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
+.render_blast_results_dt_impl <- function(df, subject_meta, taxonomy_columns = character()) {
+  merged <- localignr_join_subject_meta(df, subject_meta)
 
-  merged <- suppressMessages(dplyr::left_join(df_join, meta_join, by = ".join"))
-
-  right_cols <- setdiff(names(merged), names(df_join))
+  right_cols <- setdiff(names(merged), names(df))
   meta_cols  <- setdiff(right_cols, c("id", ".join"))
 
   tt <- if (nrow(merged)) {
@@ -171,7 +168,7 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   if (length(tt)) {
     display$hit_ID <- sprintf(
       '<span data-toggle="tooltip" data-html="true" title="%s">%s</span>',
-      tt, htmltools::htmlEscape(df$hit_ID)
+      htmltools::htmlEscape(tt, attribute = TRUE), htmltools::htmlEscape(df$hit_ID)
     )
   } else {
     display$hit_ID <- htmltools::htmlEscape(df$hit_ID)
@@ -203,6 +200,9 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
     eval        = "e-value"
   )
 
+  taxonomy_columns <- intersect(taxonomy_columns, grep("^taxon_", names(merged), value = TRUE))
+  for (nm in taxonomy_columns) display[[nm]] <- merged[[nm]]
+  cols <- c(cols, stats::setNames(sub("^taxon_", "Taxon ", taxonomy_columns), taxonomy_columns))
   display <- display[names(cols)]
 
   # e-value is a raw double, so browsers display its full imprecise binary
@@ -216,7 +216,7 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
   DT::datatable(
     display,
     colnames = unname(cols),
-    escape = FALSE,
+    escape = which(names(display) != "hit_ID"),
     selection = "single",
     filter = "top",
     options = list(
@@ -241,8 +241,8 @@ parse_alignment_xml_to_df <- function(xml_doc, aligner = "BLAST") {
     DT::formatRound("pct_cov", digits = 2)
 }
 
-render_alignment_results_dt <- function(df, subject_meta) {
-  .render_blast_results_dt_impl(df = df, subject_meta = subject_meta)
+render_alignment_results_dt <- function(df, subject_meta, taxonomy_columns = character()) {
+  .render_blast_results_dt_impl(df = df, subject_meta = subject_meta, taxonomy_columns = taxonomy_columns)
 }
 
 render_blast_results_dt <- function(df, subject_meta) {
@@ -253,14 +253,14 @@ render_clicked_summary_table <- function(row, subject_meta) {
   idraw <- as.character(row$hit_ID)
   key   <- canon_id(idraw)
 
-  meta_rows <- subject_meta[canon_id(subject_meta$id) == key, , drop = FALSE]
+  meta_rows <- subject_meta[localignr_match_subjects(idraw, subject_meta$id), , drop = FALSE]
   meta_cols <- setdiff(names(subject_meta), "id")
 
   tt <- if (nrow(meta_rows)) build_tt_row(meta_rows[, meta_cols, drop = FALSE]) else "No metadata"
 
   id_disp <- sprintf(
     '<span data-toggle="tooltip" data-html="true" title="%s">%s</span>',
-    tt, htmltools::htmlEscape(idraw)
+    htmltools::htmlEscape(tt, attribute = TRUE), htmltools::htmlEscape(idraw)
   )
 
   data.frame(
@@ -345,11 +345,9 @@ align_strings <- function(xml_doc, width = 40) {
 }
 
 build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta) {
-  df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
-  meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
-  merged    <- suppressMessages(dplyr::left_join(df_join, meta_join, by = ".join"))
+  merged <- localignr_join_subject_meta(df, subject_meta)
 
-  right_cols <- setdiff(names(merged), names(df_join))
+  right_cols <- setdiff(names(merged), names(df))
   meta_cols  <- setdiff(right_cols, c("id", ".join"))
 
   al_vec <- align_strings(xml_doc, width = 40)
@@ -404,7 +402,7 @@ build_and_save_alignment_html_report <- function(file, xml_doc, df, subject_meta
   widget <- DT::datatable(
     display,
     colnames = unname(cols),
-    escape = FALSE,
+    escape = which(names(display) != "hit_ID"),
     selection = "none",
     filter = "top",
     options = list(
@@ -460,11 +458,9 @@ build_and_save_html_report <- build_and_save_alignment_html_report
 #' per row.
 
 build_and_save_alignment_xlsx_report <- function(file, xml_doc, df, subject_meta) {
-  df_join   <- dplyr::mutate(df, .join = canon_id(hit_ID))
-  meta_join <- dplyr::mutate(subject_meta, .join = canon_id(id))
-  merged    <- suppressMessages(dplyr::left_join(df_join, meta_join, by = ".join"))
+  merged <- localignr_join_subject_meta(df, subject_meta)
 
-  right_cols <- setdiff(names(merged), names(df_join))
+  right_cols <- setdiff(names(merged), names(df))
   meta_cols  <- setdiff(right_cols, c("id", ".join"))
 
   al_vec <- align_strings(xml_doc, width = 60)
