@@ -1,0 +1,88 @@
+{
+  "schema_version": "1.1",
+  "source": {
+    "provider": "zenodo",
+    "record_doi": "10.5281/zenodo.24613001",
+    "record_version": "v1"
+  },
+  "databases": [
+    {
+      "id": "uniprot_sprot",
+      "version": "2026-11-27",
+      "display_name": "UniProtKB/Swiss-Prot",
+      "description": "UniProtKB/Swiss-Prot protein sequences, metadata and taxonomy maps.",
+      "molecule": "protein",
+      "recommended_aligner": "blast",
+      "license": "UniProt License",
+      "files": [
+        {
+          "kind": "archive",
+          "filename": "uniprot_sprot_11_27_2026.tar.gz",
+          "url": "https://zenodo.org/records/24613001/files/uniprot_sprot_11_27_2026.tar.gz",
+          "sha256": "6fa86b81d92cce474fbb4eb8fd476eb75390fc0b9567631f48fc52f467412b83"
+        }
+      ],
+      "post_download": {
+        "extract": {
+          "type": "tar.gz",
+          "outputs": [
+            "uniprot_sprot_11_27_2026.faa",
+            "uniprot_metadata_11_27_2026.tsv",
+            "uniprot_blast_taxid_map_11_27_2026.tsv",
+            "uniprot_diamond_taxid_map_11_27_2026.tsv"
+          ],
+          "layout": "flat_or_single_named_directory"
+        },
+        "format_options": [
+          {
+            "tool": "makeblastdb",
+            "input": "uniprot_sprot_11_27_2026.faa",
+            "taxid_map": "uniprot_blast_taxid_map_11_27_2026.tsv"
+          },
+          {
+            "tool": "diamond",
+            "input": "uniprot_sprot_11_27_2026.faa",
+            "taxid_map": "uniprot_diamond_taxid_map_11_27_2026.tsv"
+          }
+        ],
+        "register": {
+          "name": "uniprot_sprot",
+          "type": "prot",
+          "metadata_path": "uniprot_metadata_11_27_2026.tsv"
+        }
+      },
+      "taxonomy": {
+        "enabled": true,
+        "provider": "NCBI",
+        "blast_taxid_map": "uniprot_blast_taxid_map_11_27_2026.tsv",
+        "diamond_taxid_map": "uniprot_diamond_taxid_map_11_27_2026.tsv",
+        "resource_set": "ncbi"
+      }
+    }
+  ],
+  "taxonomy_resources": {
+    "ncbi": {
+      "archives": [
+        {
+          "url": "https://ftp.ncbi.nih.gov/pub/taxonomy/taxdump.tar.gz",
+          "filename": "taxdump.tar.gz",
+          "outputs": [
+            "nodes.dmp",
+            "names.dmp",
+            "merged.dmp",
+            "delnodes.dmp"
+          ]
+        },
+        {
+          "url": "https://ftp.ncbi.nih.gov/blast/db/taxdb.tar.gz",
+          "filename": "taxdb.tar.gz",
+          "outputs": [
+            "taxdb.btd",
+            "taxdb.bti",
+            "taxonomy4blast.sqlite3"
+          ]
+        }
+      ]
+    }
+  }
+}
