@@ -30,6 +30,8 @@ source("R/09_aligner_params.R")
 source("R/10_search_strategy.R")
 source("R/11_user_preferences.R")
 source("R/12_job_report.R")
+source("R/13_taxonomy.R")
+source("R/14_taxonomy_build.R")
 
 source("R/90_diagnostics.R", local = TRUE)
 source("R/91_databases.R", local = TRUE)

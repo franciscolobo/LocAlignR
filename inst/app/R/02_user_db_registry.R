@@ -9,7 +9,12 @@ registry_schema_columns <- function() {
     "created",
     "version",
     "metadata_path",
-    "has_metadata"
+    "has_metadata",
+    "has_taxonomy",
+    "taxonomy_source",
+    "taxonomy_dir",
+    "taxonomy_snapshot",
+    "taxonomy_map_path"
   )
 }
 
@@ -25,6 +30,11 @@ empty_registry_df <- function() {
     version = character(),
     metadata_path = character(),
     has_metadata = logical(),
+    has_taxonomy = logical(),
+    taxonomy_source = character(),
+    taxonomy_dir = character(),
+    taxonomy_snapshot = character(),
+    taxonomy_map_path = character(),
     stringsAsFactors = FALSE
   )
 }
@@ -37,7 +47,7 @@ normalize_registry_df <- function(df) {
   cols <- registry_schema_columns()
   
   for (nm in setdiff(cols, names(df))) {
-    if (identical(nm, "has_metadata")) {
+    if (nm %in% c("has_metadata", "has_taxonomy")) {
       df[[nm]] <- FALSE
     } else {
       df[[nm]] <- ""
@@ -56,6 +66,12 @@ normalize_registry_df <- function(df) {
   df$version <- as.character(df$version)
   df$metadata_path <- as.character(df$metadata_path)
   df$has_metadata <- as.logical(df$has_metadata)
+  df$has_taxonomy <- as.logical(df$has_taxonomy)
+  df$has_taxonomy[is.na(df$has_taxonomy)] <- FALSE
+  for (nm in c("taxonomy_source", "taxonomy_dir", "taxonomy_snapshot", "taxonomy_map_path")) {
+    df[[nm]] <- as.character(df[[nm]])
+    df[[nm]][is.na(df[[nm]])] <- ""
+  }
   
   df$backend[!nzchar(df$backend)] <- "blast"
   df$source[!nzchar(df$source)] <- "user"
@@ -242,6 +258,11 @@ load_user_dbs <- function(path = user_db_file) {
       version = as.character(entry$version %||% ""),
       metadata_path = metadata_path,
       has_metadata = has_metadata,
+      has_taxonomy = as.logical(entry$has_taxonomy %||% FALSE),
+      taxonomy_source = as.character(entry$taxonomy_source %||% ""),
+      taxonomy_dir = as.character(entry$taxonomy_dir %||% ""),
+      taxonomy_snapshot = as.character(entry$taxonomy_snapshot %||% ""),
+      taxonomy_map_path = as.character(entry$taxonomy_map_path %||% ""),
       stringsAsFactors = FALSE
     )
   })
@@ -250,14 +271,14 @@ load_user_dbs <- function(path = user_db_file) {
 }
 
 save_user_dbs <- function(df, path = user_db_file) {
-  ensure_user_db_dir()
+  dir.create(dirname(path), recursive = TRUE, showWarnings = FALSE)
   
   df <- normalize_registry_df(df)
   
   if (!nrow(df)) {
     tmp <- paste0(path, ".tmp")
     yaml::write_yaml(list(), tmp)
-    file.rename(tmp, path)
+    if (!file.rename(tmp, path)) stop("Cannot save database registry: ", path)
     return(invisible(NULL))
   }
   
@@ -274,7 +295,12 @@ save_user_dbs <- function(df, path = user_db_file) {
         created = row$created,
         version = row$version,
         metadata_path = row$metadata_path,
-        has_metadata = isTRUE(row$has_metadata)
+        has_metadata = isTRUE(row$has_metadata),
+        has_taxonomy = isTRUE(row$has_taxonomy),
+        taxonomy_source = row$taxonomy_source,
+        taxonomy_dir = row$taxonomy_dir,
+        taxonomy_snapshot = row$taxonomy_snapshot,
+        taxonomy_map_path = row$taxonomy_map_path
       )
     }),
     df$name
@@ -282,7 +308,7 @@ save_user_dbs <- function(df, path = user_db_file) {
   
   tmp <- paste0(path, ".tmp")
   yaml::write_yaml(lst, tmp)
-  file.rename(tmp, path)
+  if (!file.rename(tmp, path)) stop("Cannot save database registry: ", path)
   
   invisible(NULL)
 }
@@ -323,10 +349,16 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
       db_path = db_input,
       db_type = db_type,
       remote = TRUE,
-      backend = "blast"
+      backend = "blast",
+      has_taxonomy = FALSE,
+      taxonomy_source = "",
+      taxonomy_dir = "",
+      taxonomy_snapshot = "",
+      taxonomy_map_path = ""
     ))
   }
 
+  registry <- normalize_registry_df(registry)
   row <- registry[match(db_input, registry$name), , drop = FALSE]
 
   shiny::validate(
@@ -366,6 +398,11 @@ resolve_db_selection <- function(db_input, registry, program, aligner = "BLAST")
     db_path = db,
     db_type = db_type,
     remote = FALSE,
-    backend = backend
+    backend = backend,
+    has_taxonomy = isTRUE(row$has_taxonomy[1]),
+    taxonomy_source = row$taxonomy_source[1],
+    taxonomy_dir = row$taxonomy_dir[1],
+    taxonomy_snapshot = row$taxonomy_snapshot[1],
+    taxonomy_map_path = row$taxonomy_map_path[1]
   )
 }
