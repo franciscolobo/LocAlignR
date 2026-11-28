@@ -51,7 +51,40 @@ panel_build_db <- function() {
         ),
         
         textInput("make_title", "Title"),
-        checkboxInput("make_parse", "Parse SeqIDs", value = TRUE),
+        conditionalPanel(
+          condition = "input.make_backend === 'blast' && !input.make_taxonomy",
+          checkboxInput("make_parse", "Parse SeqIDs", value = TRUE)
+        ),
+        checkboxInput("make_taxonomy", "Build taxonomy-aware database", value = FALSE),
+        conditionalPanel(
+          condition = "input.make_taxonomy",
+          selectInput(
+            "make_taxonomy_method", "Taxonomy assignment method",
+            choices = c("Extract UniProt OX= fields" = "uniprot",
+                        "Assign one NCBI TaxID to all sequences" = "single",
+                        "Upload sequence-to-TaxID mapping" = "mapping"),
+            selected = "uniprot"
+          ),
+          conditionalPanel(
+            condition = "input.make_taxonomy_method === 'uniprot'",
+            helpText("Every sequence must have a UniProt sp| or tr| identifier and an OX= field.")
+          ),
+          conditionalPanel(
+            condition = "input.make_taxonomy_method === 'single'",
+            textInput("make_taxonomy_taxid", "NCBI TaxID", placeholder = "e.g. 9606")
+          ),
+          conditionalPanel(
+            condition = "input.make_taxonomy_method === 'mapping'",
+            fileInput("make_taxonomy_map", "Sequence-to-TaxID TSV", multiple = FALSE,
+                      accept = c(".tsv", ".txt")),
+            helpText("Exactly two tab-separated columns with header: id and taxid. IDs must match every FASTA identifier exactly.")
+          ),
+          helpText("All sequences must have valid TaxIDs. Shared NCBI taxonomy files are reused or downloaded if required. A new database name is required."),
+          conditionalPanel(
+            condition = "input.make_backend === 'blast'",
+            helpText("BLAST taxonomy-aware indexing automatically enables Parse SeqIDs.")
+          )
+        ),
         
         fluidRow(
           column(

@@ -761,17 +761,30 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   observeEvent(input$make_run, {
-    run_makeseqdb_and_register(
-      input = input,
-      cfg = cfg,
-      db_registry = db_registry,
-      allowed_db_fun = function(program) allowed_db_choices(program, aligner = "BLAST"),
-      session = session,
-      append_log = append_make_log
-    )
-    
-    rm(list = ls(envir = metadata_cache), envir = metadata_cache)
-    logf("[META] Metadata cache cleared after DB registration")
+    make_log("")
+    tryCatch({
+      taxonomy <- localignr_taxonomy_build_input(input)
+      if (!is.null(taxonomy)) {
+        append_make_log("[taxonomy] Assignment method: %s", taxonomy$method)
+        append_make_log("[taxonomy] Checking shared NCBI resources; first use may require downloads.")
+      }
+      run_makeseqdb_and_register(
+        input = input,
+        cfg = cfg,
+        db_registry = db_registry,
+        allowed_db_fun = function(program) allowed_db_choices(program, aligner = "BLAST"),
+        session = session,
+        append_log = append_make_log,
+        taxonomy = taxonomy
+      )
+      rm(list = ls(envir = metadata_cache), envir = metadata_cache)
+      logf("[META] Metadata cache cleared after DB registration")
+    }, error = function(e) {
+      msg <- conditionMessage(e)
+      if (!nzchar(msg)) msg <- "Database construction failed. Check inputs and build log."
+      append_make_log("[error] %s", msg)
+      showNotification(msg, type = "error", duration = 10)
+    })
   })
   
   # ---- Load search strategy from JSON ----

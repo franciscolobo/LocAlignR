@@ -130,3 +130,29 @@ localignr_taxonomy_validate_diamond_log <- function(stdout, stderr, expected) {
   }
   invisible(TRUE)
 }
+
+# Translate active Shiny controls into the optional backend configuration.
+# Hidden controls retain their values in Shiny; deliberately ignore them.
+localignr_taxonomy_build_input <- function(input) {
+  if (!isTRUE(input$make_taxonomy)) return(NULL)
+  method <- input$make_taxonomy_method
+  if (length(method) != 1L || is.na(method) ||
+      !method %in% c("uniprot", "single", "mapping")) {
+    stop("Choose a taxonomy assignment method.", call. = FALSE)
+  }
+  config <- list(method = method)
+  if (method == "single") {
+    taxid <- input$make_taxonomy_taxid
+    if (length(taxid) != 1L) stop("Provide one NCBI TaxID.", call. = FALSE)
+    config$taxid <- localignr_taxonomy_check_ids(taxid)
+  } else if (method == "mapping") {
+    upload <- input$make_taxonomy_map
+    if (!is.list(upload) || length(upload$datapath) != 1L ||
+        is.na(upload$datapath) || !file.exists(upload$datapath) ||
+        dir.exists(upload$datapath)) {
+      stop("Choose a sequence-to-TaxID mapping TSV.", call. = FALSE)
+    }
+    config$mapping_path <- upload$datapath
+  }
+  config
+}

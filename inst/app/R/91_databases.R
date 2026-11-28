@@ -8,6 +8,7 @@ wire_databases <- function(input, output, session, db_registry, cfg, allowed_db_
   registry_display <- reactive({
     reg <- db_registry()
     if (is.null(reg) || !nrow(reg)) return(reg)
+    reg <- normalize_registry_df(reg)
 
     status <- vapply(seq_len(nrow(reg)), function(i) {
       p <- reg$path[i]
@@ -33,14 +34,16 @@ wire_databases <- function(input, output, session, db_registry, cfg, allowed_db_
 
     display <- df[, c(
       "name", "title", "type", "backend", "source",
-      "created", "version", "has_metadata", "status", "path"
+      "created", "version", "has_metadata", "has_taxonomy",
+      "taxonomy_snapshot", "status", "path"
     )]
 
     DT::datatable(
       display,
       colnames = c(
         "Name", "Title", "Type", "Backend", "Source", "Created",
-        "Version", "Has metadata", "Status", "Path"
+        "Version", "Has metadata", "Has taxonomy", "Taxonomy snapshot",
+        "Status", "Path"
       ),
       selection = "multiple",
       filter = "top",
